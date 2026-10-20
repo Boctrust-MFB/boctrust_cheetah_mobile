@@ -180,14 +180,16 @@ class _ProfileAvatarState extends ConsumerState<ProfileAvatar> {
     return Semantics(
       label: 'Profile photo',
       child: ClipOval(
-        child: Image.network(
-          displayUrl,
+        child: CachedNetworkImage(
+          imageUrl: displayUrl,
           width: widget.radius * 2,
           height: widget.radius * 2,
           fit: BoxFit.cover,
-          loadingBuilder: (context, child, progress) =>
-              progress == null ? child : fallback,
-          errorBuilder: (context, error, stackTrace) {
+          memCacheWidth:
+              (widget.radius * 2 * MediaQuery.devicePixelRatioOf(context))
+                  .round(),
+          placeholder: (context, url) => fallback,
+          errorWidget: (context, url, error) {
             if (displayUrl == directUrl && directUrl != null) {
               // The profile may hold a private URL that needs a fresh
               // signature. Try the signed endpoint after a direct load fails.

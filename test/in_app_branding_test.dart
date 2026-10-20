@@ -128,12 +128,13 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
-  testWidgets('the home header shows Cheetah by BocTrust', (tester) async {
+  testWidgets('the home header prioritizes the signed-in customer', (
+    tester,
+  ) async {
     await _pumpScreen(tester, AppRoutes.home, populated: true);
 
-    expect(find.byType(CheetahBrand), findsOneWidget);
-    expect(find.text('Cheetah'), findsOneWidget);
-    expect(find.text('by BocTrust'), findsOneWidget);
+    expect(find.byType(ProfileAvatar), findsOneWidget);
+    expect(find.byType(CheetahBrand), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
   });
@@ -142,7 +143,6 @@ void main() {
     for (final (screen, populated) in [
       (AppRoutes.bootstrap, false),
       (AppRoutes.login, false),
-      (AppRoutes.home, true),
     ]) {
       testWidgets('$screen shows the Cheetah lockup', (tester) async {
         await _pumpScreen(tester, screen, populated: populated);
@@ -151,18 +151,6 @@ void main() {
         expect(svg, findsOneWidget);
         expect(_assetOf(tester, svg), _markAsset);
         expect(_inLogo(find.byIcon(Icons.savings_rounded)), findsNothing);
-        if (screen == AppRoutes.home) {
-          // The Save destination is a product icon, not app identity.
-          final saveTab = find.byWidgetPredicate(
-            (w) =>
-                w is SvgPicture &&
-                w.bytesLoader is SvgAssetLoader &&
-                (w.bytesLoader as SvgAssetLoader).assetName ==
-                    'assets/svg/nav/save_linear.svg',
-          );
-          expect(saveTab, findsOneWidget);
-          expect(_inLogo(saveTab), findsNothing);
-        }
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump(const Duration(seconds: 1));
       });

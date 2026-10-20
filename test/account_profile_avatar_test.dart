@@ -7,15 +7,24 @@ import 'package:boctrust_savings_loan/module/account/provider/user_providers.dar
 import 'package:boctrust_savings_loan/module/account/service/user_service.dart';
 import 'package:boctrust_savings_loan/module/app_flow/app_ui.dart';
 import 'package:boctrust_savings_loan/module/onboarding/provider/auth_session_provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:dio/dio.dart';
 
 import 'support/flow_harness.dart';
 import 'support/savings_fixtures.dart';
 
 const _profileImage = 'https://images.example.test/ada.jpg';
+
+CachedNetworkImage _cachedAvatar(WidgetTester tester) =>
+    tester.widget<CachedNetworkImage>(
+      find.descendant(
+        of: find.byType(ProfileAvatar),
+        matching: find.byType(CachedNetworkImage),
+      ),
+    );
 
 class _ProfileWithImage extends UserProfileNotifier {
   @override
@@ -93,6 +102,41 @@ class _NoSignedImageService extends UserService {
 }
 
 void main() {
+  testWidgets('ProfileAvatar caches remote profile photos', (tester) async {
+    await pumpFlow(
+      tester,
+      route: AppRoutes.account,
+      overrides: [
+        userProfileProvider.overrideWith(_ProfileWithImage.new),
+        userServiceProvider.overrideWithValue(_NoSignedImageService()),
+      ],
+    );
+
+    expect(find.byType(CachedNetworkImage), findsOneWidget);
+  });
+
+  testWidgets('ProfileAvatar keeps its initials fallback while loading', (
+    tester,
+  ) async {
+    await pumpFlow(
+      tester,
+      route: AppRoutes.account,
+      overrides: [
+        userProfileProvider.overrideWith(_ProfileWithImage.new),
+        userServiceProvider.overrideWithValue(_NoSignedImageService()),
+      ],
+    );
+
+    final cached = _cachedAvatar(tester);
+    final context = tester.element(find.byType(CachedNetworkImage));
+
+    expect(cached.placeholder!(context, cached.imageUrl), isA<CircleAvatar>());
+    expect(
+      cached.errorWidget!(context, cached.imageUrl, Exception('failed')),
+      isA<CircleAvatar>(),
+    );
+  });
+
   testWidgets('Account requests the signed URL even without a profile URL', (
     tester,
   ) async {
@@ -109,14 +153,8 @@ void main() {
     await tester.pump();
 
     expect(service.signedUrlReads, 1);
-    final image = tester.widget<Image>(
-      find.descendant(
-        of: find.byType(ProfileAvatar),
-        matching: find.byType(Image),
-      ),
-    );
     expect(
-      (image.image as NetworkImage).url,
+      _cachedAvatar(tester).imageUrl,
       'https://images.example.test/ada-signed.jpg',
     );
   });
@@ -136,13 +174,7 @@ void main() {
     );
     await tester.pump();
 
-    final image = tester.widget<Image>(
-      find.descendant(
-        of: find.byType(ProfileAvatar),
-        matching: find.byType(Image),
-      ),
-    );
-    expect((image.image as NetworkImage).url, _profileImage);
+    expect(_cachedAvatar(tester).imageUrl, _profileImage);
   });
 
   test('profile also reads the image_url spelling', () {
@@ -175,14 +207,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final image = tester.widget<Image>(
-      find.descendant(
-        of: find.byType(ProfileAvatar),
-        matching: find.byType(Image),
-      ),
-    );
     expect(
-      (image.image as NetworkImage).url,
+      _cachedAvatar(tester).imageUrl,
       'https://images.example.test/ada-signed.jpg',
     );
   });

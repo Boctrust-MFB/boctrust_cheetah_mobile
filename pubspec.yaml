@@ -36,6 +36,7 @@ dependencies:
     path: packages/dojah_kyc_sdk_flutter
   image_picker: ^1.2.4
   camera: ^0.12.1
+  cached_network_image: ^4.0.4
 
 dev_dependencies:
   flutter_launcher_icons: 0.14.4

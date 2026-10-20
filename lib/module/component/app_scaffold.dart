@@ -9,6 +9,8 @@ class AppScaffold extends StatelessWidget {
     this.titleWidget,
     this.onBack,
     this.actions,
+    this.centerTitle,
+    this.toolbarHeight,
     this.showBottomNavigation = true,
     super.key,
   });
@@ -20,6 +22,8 @@ class AppScaffold extends StatelessWidget {
   final ValueChanged<AppSection> onSectionSelected;
   final VoidCallback? onBack;
   final List<Widget>? actions;
+  final bool? centerTitle;
+  final double? toolbarHeight;
   final bool showBottomNavigation;
 
   @override
@@ -40,6 +44,8 @@ class AppScaffold extends StatelessWidget {
               ),
         leadingWidth: onBack == null ? null : BocSpace.minTouch + BocSpace.md,
         automaticallyImplyLeading: false,
+        centerTitle: centerTitle,
+        toolbarHeight: toolbarHeight,
         title: titleWidget ?? Text(title ?? ''),
         actions: actions,
       ),

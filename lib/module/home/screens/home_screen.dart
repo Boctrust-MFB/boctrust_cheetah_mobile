@@ -67,14 +67,10 @@ extension HomeScreenParts on FlowPageState {
       );
     }
 
-    final displayName = profile?.firstName?.trim().isNotEmpty == true
+    final displayName = profile?.displayName ?? 'BOCTRUST customer';
+    final firstName = profile?.firstName?.trim().isNotEmpty == true
         ? profile!.firstName!.trim()
         : 'there';
-    final identifier =
-        profile?.phoneNumber ??
-        profile?.email ??
-        session?.phoneNumber ??
-        session?.email;
     final tierSummary = tier?.currentTierSummary;
     final topTier = tier?.tiers.fold<int>(
       0,
@@ -90,7 +86,14 @@ extension HomeScreenParts on FlowPageState {
     final theme = Theme.of(context);
 
     return AppScaffold(
-      titleWidget: const CheetahBrand.header(),
+      centerTitle: false,
+      toolbarHeight: 72,
+      titleWidget: _HomeIdentityHeader(
+        displayName: displayName,
+        firstName: firstName,
+        imageUrl: profile?.imageUrl,
+        onAvatarTap: () => go(AppRoutes.account),
+      ),
       activeSection: AppSection.home,
       onSectionSelected: goSection,
       actions: [
@@ -143,18 +146,6 @@ extension HomeScreenParts on FlowPageState {
             BocSpace.lg,
           ).clearOfNav(context),
           children: [
-            Semantics(
-              header: true,
-              child: Text(
-                'Hi, $displayName',
-                style: theme.textTheme.titleLarge,
-              ),
-            ),
-            if (identifier != null) ...[
-              const SizedBox(height: BocSpace.xxs),
-              Text(identifier, style: theme.textTheme.bodySmall),
-            ],
-            const SizedBox(height: BocSpace.md),
             if (profileState.isError || tierState.isError) ...[
               ApiStateCard(
                 title: 'Some account details did not load',
@@ -689,6 +680,69 @@ extension HomeScreenParts on FlowPageState {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _HomeIdentityHeader extends StatelessWidget {
+  const _HomeIdentityHeader({
+    required this.displayName,
+    required this.firstName,
+    required this.imageUrl,
+    required this.onAvatarTap,
+  });
+
+  final String displayName;
+  final String firstName;
+  final String? imageUrl;
+  final VoidCallback onAvatarTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = context.bocColors;
+
+    return Row(
+      children: [
+        Tooltip(
+          message: 'Open account',
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onAvatarTap,
+            child: ProfileAvatar(
+              displayName: displayName,
+              imageUrl: imageUrl,
+              radius: 24,
+            ),
+          ),
+        ),
+        const SizedBox(width: BocSpace.sm),
+        Expanded(
+          child: Semantics(
+            header: true,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  timeBasedGreeting(DateTime.now()),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                ),
+                Text(
+                  firstName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

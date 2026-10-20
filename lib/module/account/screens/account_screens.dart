@@ -365,12 +365,12 @@ extension _AccountScreens on _AccountPageState {
                 const SettingsTile(
                   icon: IconsaxPlusLinear.call,
                   title: 'Call customer care',
-                  subtitle: '+234 906 464 1439 · 0703 973 9086',
+                  subtitle: '09064641439',
                 ),
                 const SettingsTile(
                   icon: IconsaxPlusLinear.sms,
                   title: 'Email support',
-                  subtitle: 'info@boctrustmfb.com',
+                  subtitle: 'enquiries@boctrustmfb.com',
                 ),
                 SettingsTile(
                   icon: IconsaxPlusLinear.shield_security,

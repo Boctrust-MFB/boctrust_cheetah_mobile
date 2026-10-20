@@ -16,9 +16,9 @@ String formatNaira(num amount, {bool decimal = true}) =>
 
 /// Morning before 12:00, afternoon before 17:00, evening otherwise.
 String timeBasedGreeting(DateTime now) {
-  if (now.hour < 12) return 'Good morning';
-  if (now.hour < 17) return 'Good afternoon';
-  return 'Good evening';
+  if (now.hour < 12) return 'Good morning,';
+  if (now.hour < 17) return 'Good afternoon,';
+  return 'Good evening,';
 }
 
 String normalizePhoneNumber(String value) {
