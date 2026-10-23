@@ -507,7 +507,6 @@ const capabilityRequirements = <FeatureCapability, CapabilityRequirement>{
   ),
   // The customer's effective transfer and bill-payment limits, read only.
   FeatureCapability.transactionLimitsView: CapabilityRequirement(
-    stagingOnly: true,
     operations: {
       (
         backend: ApiBackend.core,

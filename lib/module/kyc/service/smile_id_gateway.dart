@@ -124,6 +124,19 @@ class _SmileJobContext {
   final Map<String, String> extraPartnerParams;
 }
 
+/// The BVN Smile ID's sandbox verifies, returning custom user details (1012).
+/// Other numbers fail sandbox lookup with 1014, so sandbox attempts send this
+/// one instead of the BVN the user entered. Mirrors `dojahSandboxBvn`.
+const smileIdSandboxBvn = '00000000000';
+
+String _smileCaptureIdNumber(
+  String enteredNumber, {
+  required IdentityType identityType,
+  required bool useSandbox,
+}) => useSandbox && identityType == IdentityType.bvn
+    ? smileIdSandboxBvn
+    : enteredNumber;
+
 String _requireText(String? value, String field) {
   final text = value?.trim() ?? '';
   if (text.isEmpty) {
@@ -192,7 +205,11 @@ final class SmileIdBiometricJob extends SmileIdCaptureJob {
       verificationId: context.verificationId,
       country: country,
       idType: identityType.smileIdWireValue,
-      idNumber: _requireText(identityNumber, 'identityNumber'),
+      idNumber: _smileCaptureIdNumber(
+        _requireText(identityNumber, 'identityNumber'),
+        identityType: identityType,
+        useSandbox: useSandbox,
+      ),
       userId: context.userId,
       jobId: context.jobId,
       callbackUrl: context.callbackUrl,

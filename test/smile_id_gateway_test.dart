@@ -144,7 +144,8 @@ void _biometricJobTests() {
       );
 
       expect(job.idType, 'BVN');
-      expect(job.idNumber, '12345678901');
+      // Sandbox swaps in Smile's test BVN; the entered one would fail with 1014.
+      expect(job.idNumber, '00000000000');
       expect(job.country, 'NG');
       expect(job.userId, 'smile-user-1');
       expect(job.jobId, 'smile-job-1');

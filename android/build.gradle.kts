@@ -35,6 +35,21 @@ subprojects {
     }
 }
 
+// Smile ID's capture screens (camposer) rebind the camera in a loop on CameraX
+// above 1.5.0, which shows as a blinking selfie preview. camera_android_camerax
+// pulls 1.6.x, so the whole build is held at Smile's supported version.
+// See smileidentity/flutter-v11#223. Remove once Smile ships a fix.
+subprojects {
+    configurations.configureEach {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "androidx.camera") {
+                useVersion("1.5.0")
+                because("Smile ID capture requires CameraX 1.5.0")
+            }
+        }
+    }
+}
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }

@@ -35,6 +35,7 @@ void main() {
       FeatureCapability.accessibilityPreferences,
       FeatureCapability.biometricLogin,
       FeatureCapability.biometricTransfers,
+      FeatureCapability.transactionLimitsView,
     });
   });
 
@@ -105,7 +106,6 @@ void main() {
       FeatureCapability.smartSaveCreate,
       FeatureCapability.fixedDepositCreate,
       FeatureCapability.flexInterestView,
-      FeatureCapability.transactionLimitsView,
     ];
     for (final capability in slices) {
       expect(availabilityOf(capability), FeatureAvailability.unavailable);
@@ -257,6 +257,21 @@ void main() {
     const view = FeatureCapability.transactionLimitsView;
     const edit = FeatureCapability.transactionLimitsEdit;
 
+    expect(
+      availabilityFor(
+        capabilityRequirements[view],
+        configuredBackends: ApiBackend.values.toSet(),
+      ),
+      FeatureAvailability.available,
+    );
+    expect(
+      availabilityFor(
+        capabilityRequirements[view],
+        configuredBackends: {ApiBackend.user},
+      ),
+      FeatureAvailability.unavailable,
+    );
+    expect(availabilityOf(edit), FeatureAvailability.unavailable);
     expect(capabilityRequirements[view]!.operations, {
       (
         backend: ApiBackend.core,

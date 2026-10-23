@@ -107,7 +107,7 @@ class IdentityVerificationNotifier extends Notifier<NotifierState<KycFlowData>>
         // account. Only the first is resumable, and only the server's message
         // can tell them apart, so never assert a cause of our own.
         final resumable =
-            _dojahInProgressFrom(
+            _inProgressFrom(
               result.errorCode,
               data,
               identityType: identityType,
@@ -162,10 +162,11 @@ class IdentityVerificationNotifier extends Notifier<NotifierState<KycFlowData>>
     }
   }
 
-  /// The Dojah attempt a `VERIFICATION_IN_PROGRESS` conflict returns, when it
-  /// was issued for the number just entered. Its masked last four digits are
-  /// the only link to that number, so a mismatch never reopens it.
-  static KycInitiationData? _dojahInProgressFrom(
+  /// The attempt a `VERIFICATION_IN_PROGRESS` conflict returns, when it was
+  /// issued for the number just entered. Its masked last four digits are the
+  /// only link to that number, so a mismatch never reopens it. This is how a
+  /// pending BVN liveness retry reaches its Smile job again.
+  static KycInitiationData? _inProgressFrom(
     String? errorCode,
     KycInitiationData? data, {
     required IdentityType identityType,
@@ -173,10 +174,16 @@ class IdentityVerificationNotifier extends Notifier<NotifierState<KycFlowData>>
   }) {
     if (errorCode != 'VERIFICATION_IN_PROGRESS' ||
         data == null ||
-        data.provider != 'dojah' ||
         data.identityType != identityType.wireValue) {
       return null;
     }
+    final relaunchable = switch (data.provider) {
+      'dojah' => true,
+      'smile_id' =>
+        GovernmentIdVerificationNotifier._resumableFrom(data) != null,
+      _ => false,
+    };
+    if (!relaunchable) return null;
     final last4 = data.identityLast4?.trim() ?? '';
     if (last4.isEmpty || !identityNumber.endsWith(last4)) return null;
     return data;

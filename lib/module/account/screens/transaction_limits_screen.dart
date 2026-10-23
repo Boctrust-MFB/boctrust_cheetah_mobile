@@ -239,17 +239,29 @@ class _TransactionLimitsScreenState
   }
 
   Widget _limits(TransactionLimits limits) {
-    String money(String? naira) =>
-        formatApiAmount(naira, currency: 'NGN') ?? 'Unavailable';
-    return BocSummaryGrid(
-      items: [
-        (label: 'Tier', value: 'Tier ${limits.tier}'),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Tier ${limits.tier}',
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: BocSpace.xxs),
+        Text(
+          'Your current limit is the lower of your set limit and your tier '
+          'maximum.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: BocSpace.md),
         for (final (label, limit) in [
           ('Single transfer', limits.singleTransfer),
           ('Daily transfers', limits.dailyTransfer),
           ('Single bill payment', limits.singleBillPayment),
-        ])
-          (label: label, value: money(limit.effective)),
+        ]) ...[
+          _TransactionLimitCard(label: label, limit: limit),
+          if (label != 'Single bill payment')
+            const SizedBox(height: BocSpace.sm),
+        ],
       ],
     );
   }
@@ -381,6 +393,84 @@ class _TransactionLimitsScreenState
           label: 'Cancel',
           onPressed: () => setState(() => _editing = false),
         ),
+      ],
+    );
+  }
+}
+
+class _TransactionLimitCard extends StatelessWidget {
+  const _TransactionLimitCard({required this.label, required this.limit});
+
+  final String label;
+  final TransactionLimit limit;
+
+  String _money(String? naira) =>
+      formatApiAmount(naira, currency: 'NGN') ?? 'Unavailable';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SurfaceCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: theme.textTheme.titleMedium),
+          const SizedBox(height: BocSpace.sm),
+          Text('Current limit', style: theme.textTheme.bodySmall),
+          const SizedBox(height: BocSpace.xxs),
+          Text(
+            _money(limit.effective),
+            style: theme.textTheme.headlineSmall?.figures,
+          ),
+          const Divider(height: BocSpace.xl),
+          if (limit.custom != null) ...[
+            _TransactionLimitRow(
+              label: 'Your set limit',
+              value: _money(limit.custom),
+            ),
+            const SizedBox(height: BocSpace.sm),
+          ],
+          _TransactionLimitRow(
+            label: 'Tier maximum',
+            value: _money(limit.business),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TransactionLimitRow extends StatelessWidget {
+  const _TransactionLimitRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final stack = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final labelText = Text(label, style: theme.textTheme.bodySmall);
+    final valueText = Text(
+      value,
+      textAlign: stack ? TextAlign.left : TextAlign.right,
+      style: theme.textTheme.titleSmall?.figures,
+    );
+    if (stack) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          labelText,
+          const SizedBox(height: BocSpace.xxs),
+          valueText,
+        ],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(child: labelText),
+        const SizedBox(width: BocSpace.sm),
+        Flexible(child: valueText),
       ],
     );
   }

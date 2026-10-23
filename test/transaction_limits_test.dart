@@ -153,24 +153,73 @@ void main() {
     expect(limits.dailyTransfer.effective, '2000000');
   });
 
-  testWidgets('shows the effective limits', (tester) async {
+  testWidgets('shows the enforced, customer-set, and tier limits', (
+    tester,
+  ) async {
     await _open(
       tester,
       NotifierState.done(
         TransactionLimits.fromJson({
-          'tier': 1,
-          'businessSingleTransferLimit': '50000.00',
-          'businessSingleBillPaymentLimit': '10000.00',
-          'businessDailyTransferLimit': '200000.00',
-          'effectiveSingleTransferLimit': '50000.00',
-          'effectiveSingleBillPaymentLimit': '10000.00',
-          'effectiveDailyTransferLimit': '200000.00',
+          'tier': 2,
+          'businessSingleTransferLimit': '500000.00',
+          'businessSingleBillPaymentLimit': '100000.00',
+          'businessDailyTransferLimit': '2000000.00',
+          'customSingleTransferLimit': '20000.00',
+          'customSingleBillPaymentLimit': null,
+          'customDailyTransferLimit': '300000.00',
+          'effectiveSingleTransferLimit': '20000.00',
+          'effectiveSingleBillPaymentLimit': '100000.00',
+          'effectiveDailyTransferLimit': '300000.00',
         }),
       ),
     );
 
-    expect(find.text('₦50,000.00'), findsOneWidget);
-    expect(find.text('₦200,000.00'), findsOneWidget);
+    Finder card(String title) =>
+        find.ancestor(of: find.text(title), matching: find.byType(SurfaceCard));
+
+    expect(find.text('Tier 2'), findsOneWidget);
+
+    final transfer = card('Single transfer');
+    expect(
+      find.descendant(of: transfer, matching: find.text('Current limit')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: transfer, matching: find.text('₦20,000.00')),
+      findsNWidgets(2),
+    );
+    expect(
+      find.descendant(of: transfer, matching: find.text('Your set limit')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: transfer, matching: find.text('Tier maximum')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: transfer, matching: find.text('₦500,000.00')),
+      findsOneWidget,
+    );
+
+    final bills = card('Single bill payment');
+    expect(
+      find.descendant(of: bills, matching: find.text('Your set limit')),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: bills, matching: find.text('₦100,000.00')),
+      findsNWidgets(2),
+    );
+
+    final daily = card('Daily transfers');
+    expect(
+      find.descendant(of: daily, matching: find.text('₦300,000.00')),
+      findsNWidgets(2),
+    );
+    expect(
+      find.descendant(of: daily, matching: find.text('₦2,000,000.00')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('tier 0 is sent to verification, not shown zero limits', (
@@ -219,10 +268,17 @@ void main() {
       await tester.pump();
     }
 
+    Future<void> startEditing(WidgetTester tester) async {
+      await tester.drag(find.byType(ListView), const Offset(0, -600));
+      await settle(tester);
+      await tester.tap(find.text('Change limits'));
+      await settle(tester);
+    }
+
     testWidgets('needs its own capability', (tester) async {
       await _open(tester, _tier1);
 
-      expect(find.text('₦200,000.00'), findsOneWidget);
+      expect(find.text('₦200,000.00'), findsWidgets);
       expect(find.text('Change limits'), findsNothing);
     });
 
@@ -232,8 +288,7 @@ void main() {
       final limits = _Limits(_tier1);
       await _open(tester, _tier1, limits: limits, editable: true);
 
-      await tester.tap(find.text('Change limits'));
-      await settle(tester);
+      await startEditing(tester);
       await edit(tester, 'Daily transfers (₦)', '1,000');
       await tester.tap(find.text('Review changes'));
       await settle(tester);
@@ -262,8 +317,7 @@ void main() {
       final limits = _Limits(_tier1);
       await _open(tester, _tier1, limits: limits, editable: true);
 
-      await tester.tap(find.text('Change limits'));
-      await settle(tester);
+      await startEditing(tester);
       await edit(tester, 'Daily transfers (₦)', '300,000');
       await tester.tap(find.text('Review changes'), warnIfMissed: false);
       await settle(tester);
@@ -277,8 +331,7 @@ void main() {
       final limits = _Limits(_tier1);
       await _open(tester, _tier1, limits: limits, editable: true);
 
-      await tester.tap(find.text('Change limits'));
-      await settle(tester);
+      await startEditing(tester);
       await tester.tap(find.text('Review changes'), warnIfMissed: false);
       await settle(tester);
 
