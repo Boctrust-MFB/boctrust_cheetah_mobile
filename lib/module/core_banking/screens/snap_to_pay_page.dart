@@ -223,6 +223,9 @@ class _SnapToPayPageState extends ConsumerState<SnapToPayPage>
     final camera = _camera;
     final now = DateTime.now();
     if (camera == null ||
+        !mounted ||
+        // Another screen is open over this one; reading resumes on return.
+        !(ModalRoute.of(context)?.isCurrent ?? false) ||
         _frameBusy ||
         _recognizing ||
         _candidates != null ||
