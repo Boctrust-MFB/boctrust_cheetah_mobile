@@ -134,6 +134,7 @@ void main() {
 
     expect(await notifier.verifyPin('0007'), const CheckStopped());
     expect(_phase(container), LimitUpdatePhase.failed);
+    await notifier.finalize();
     expect(limits.finalized, 0);
   });
 

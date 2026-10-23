@@ -14,8 +14,7 @@ The staging configuration must define `ENV=staging`,
 specific `SECURE_STORAGE_NAMESPACE`. `SITE_URL=https://boctrustmfb.com`
 provides the public privacy policy and terms shown in the app. KYC builds also define
 `DOJAH_SELFIE_WIDGET_ID` and `DOJAH_GOVERNMENT_WIDGET_ID` with the published
-widget for each environment. `PAYSTACK_PUBLIC_KEY` is reserved for the future
-card-funding integration. Copy `.env.example` for a new local setup;
+widget for each environment. Copy `.env.example` for a new local setup;
 environment files remain gitignored.
 
 `CORE_BASE_URL=https://core-dev-api.centurysoftware.dev/api` points at the
