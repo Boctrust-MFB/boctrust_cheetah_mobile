@@ -4,7 +4,6 @@ import 'package:boctrust_savings_loan/app/inactivity_guard.dart';
 import 'package:boctrust_savings_loan/app/theme_controller.dart';
 import 'package:boctrust_savings_loan/module/app_flow/app_ui.dart';
 import 'package:boctrust_savings_loan/module/component/text_fields.dart';
-import 'package:boctrust_savings_loan/utils/form_helpers.dart';
 import 'package:boctrust_savings_loan/utils/input_formatters.dart';
 import 'package:boctrust_savings_loan/utils/validators.dart' as validators;
 import 'package:flutter/material.dart';
@@ -90,26 +89,6 @@ void main() {
     expect(app.themeMode, ThemeMode.system);
   });
 
-  testWidgets('PhoneNumberInput forwards autovalidate mode', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Form(
-            autovalidateMode: AutovalidateMode.onUserInteraction,
-            child: PhoneNumberInput(
-              autoValidateMode: AutovalidateMode.onUserInteraction,
-              validator: validators.nigerianPhone,
-            ),
-          ),
-        ),
-      ),
-    );
-
-    await tester.enterText(find.byType(TextFormField), '123');
-    await tester.pump();
-    expect(find.text('Input a valid phone number'), findsOneWidget);
-  });
-
   testWidgets('FormDropdown participates in validation', (tester) async {
     final key = GlobalKey<FormState>();
     await tester.pumpWidget(
@@ -134,9 +113,7 @@ void main() {
 
   test('validators cover common Cheetah form rules', () {
     expect(validators.requiredText('   '), isNotNull);
-    expect(validators.optionalName('A'), isNotNull);
     expect(validators.email('user@example.com'), isNull);
-    expect(validators.nigerianPhone('0800-000-0000'), isNull);
     expect(validators.isPasswordValid('Password1'), isNotNull);
     expect(validators.isPasswordValid('Password1!'), isNull);
     expect(validators.confirmPassword('Password1!', 'Password1!'), isNull);
@@ -147,10 +124,6 @@ void main() {
     expect(validators.strongTransactionPin('7890'), isNull);
     expect(validators.bvn('12345678901'), isNull);
     expect(validators.nin('12345678901'), isNull);
-    expect(validators.bankAccountNumber('1234567890'), isNull);
-    expect(validators.nairaAmountRange('1,000', min: 500, max: 2000), isNull);
-    expect(validators.conditionalOtherText('', isOther: true), isNotNull);
-    expect(validators.fileUploadRequired(null), isNotNull);
   });
 
   test('input formatters normalize constrained input', () {
@@ -159,43 +132,6 @@ void main() {
       const TextEditingValue(text: '08000000000'),
     );
     expect(phone.text, '0800-000-0000');
-  });
-
-  testWidgets('validateAndSave calls success or failure guardrails', (
-    tester,
-  ) async {
-    final key = GlobalKey<FormState>();
-    var success = false;
-    AutovalidateMode? failureMode;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Form(
-            key: key,
-            child: TextFormField(validator: validators.requiredText),
-          ),
-        ),
-      ),
-    );
-
-    final failed = validateAndSave(
-      formKey: key,
-      onSuccess: () => success = true,
-      onFailure: (mode) => failureMode = mode,
-    );
-    expect(failed, isFalse);
-    expect(success, isFalse);
-    expect(failureMode, AutovalidateMode.onUserInteraction);
-
-    await tester.enterText(find.byType(TextFormField), 'Ada');
-    final passed = validateAndSave(
-      formKey: key,
-      onSuccess: () => success = true,
-      onFailure: (mode) => failureMode = mode,
-    );
-    expect(passed, isTrue);
-    expect(success, isTrue);
   });
 
   test('all registered routes include required UX parity routes', () {

@@ -1,8 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'response_handler.dart';
-
 abstract final class Env {
   static const environment = String.fromEnvironment('ENV');
   static const baseUrl = String.fromEnvironment('BASE_URL');
@@ -15,9 +13,6 @@ abstract final class Env {
   static bool get hasCoreBaseUrl => coreBaseUrl.trim().isNotEmpty;
   static const secureStorageNamespace = String.fromEnvironment(
     'SECURE_STORAGE_NAMESPACE',
-  );
-  static const paystackPublicKey = String.fromEnvironment(
-    'PAYSTACK_PUBLIC_KEY',
   );
   static const dojahSelfieWidgetId = String.fromEnvironment(
     'DOJAH_SELFIE_WIDGET_ID',
@@ -378,39 +373,6 @@ class NotifierState<T> extends Equatable {
     meta,
     noAuth,
   ];
-}
-
-abstract final class ProcessProvider {
-  static void run<T>(
-    NotifierState<T> state, {
-    void Function(T data)? doneCb,
-    void Function(NotifierState<T> state)? errorCb,
-    bool showSuccess = false,
-    bool showError = true,
-  }) {
-    switch (state.status) {
-      case ServiceStatus.success:
-        final data = state.data;
-        if (data != null) doneCb?.call(data);
-        if (showSuccess && state.message?.isNotEmpty == true) {
-          ResponseHandler.showSuccess(state.message!);
-        }
-      case ServiceStatus.error:
-        errorCb?.call(state);
-        if (showError && !state.noAuth && state.message?.isNotEmpty == true) {
-          ResponseHandler.showError(state.message!);
-        }
-      case ServiceStatus.blocked:
-        errorCb?.call(state);
-        if (showError && state.message?.isNotEmpty == true) {
-          ResponseHandler.showError(state.message!);
-        }
-      case ServiceStatus.idle:
-      case ServiceStatus.loading:
-      case ServiceStatus.empty:
-        break;
-    }
-  }
 }
 
 /// Discards results from superseded or disposed async requests.

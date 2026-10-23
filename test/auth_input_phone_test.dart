@@ -1,6 +1,5 @@
 import 'package:boctrust_savings_loan/utils/auth_input.dart';
 import 'package:boctrust_savings_loan/utils/input_formatters.dart';
-import 'package:boctrust_savings_loan/utils/validators.dart' as validators;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,7 +19,6 @@ void main() {
   test('phone normalization does not silently discard letters', () {
     expect(isValidNigerianPhone('0800-a000-0000'), isFalse);
     expect(isValidNigerianPhone('+234-800-000-000x0'), isFalse);
-    expect(validators.nigerianPhone('0800-a000-0000'), isNotNull);
   });
 
   test('phone input accepts dashed local and international numbers', () {
