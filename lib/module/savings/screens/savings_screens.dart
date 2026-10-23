@@ -335,7 +335,8 @@ extension SavingsScreens on FlowPageState {
       hidden: hidden,
       accountNumber:
           type == SavingsProductType.smartSave ||
-              type == SavingsProductType.fixed
+              type == SavingsProductType.fixed ||
+              type == SavingsProductType.padi
           ? null
           : account.accountNumber,
       status: _accountStatusLabel(account.status),
@@ -356,7 +357,10 @@ extension SavingsScreens on FlowPageState {
         SavingsProductType.fixed => 'deposit',
         _ => null,
       },
-      onTap: plansRoute != null
+      statusTag: type == SavingsProductType.padi ? 'Coming soon' : null,
+      onTap: type == SavingsProductType.padi
+          ? null
+          : plansRoute != null
           ? () => go(plansRoute)
           : available(FeatureCapability.coreAccountActivity)
           ? () => go(
@@ -505,7 +509,6 @@ extension SavingsScreens on FlowPageState {
                   currency: 'NGN',
                 ),
                 hidden: hidden,
-                accountNumber: flex.accountNumber,
                 rate: flexRate == null ? null : _formatRate(flexRate),
                 frozen: flex.isFrozen,
                 onTap: () => go(AppRoutes.flexSave),
@@ -593,9 +596,8 @@ extension SavingsScreens on FlowPageState {
               _planTypeFor(product);
     return BankProductCard(
       title: product.name,
-      description: type == SavingsProductType.padi
-          ? 'Coming soon'
-          : product.description,
+      description: product.description,
+      statusTag: type == SavingsProductType.padi ? 'Coming soon' : null,
       icon: switch (type) {
         SavingsProductType.smartSave => IconsaxPlusLinear.flag,
         SavingsProductType.fixed => IconsaxPlusLinear.lock,

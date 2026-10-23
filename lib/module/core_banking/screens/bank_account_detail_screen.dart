@@ -188,7 +188,9 @@ class _BankAccountDetailScreenState
               const SizedBox(width: BocSpace.sm),
               Expanded(
                 child: Text(
-                  'Account ${summary.accountNumber}',
+                  widget._flex
+                      ? 'Boc Flex Savings'
+                      : 'Account ${summary.accountNumber}',
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),

@@ -350,18 +350,6 @@ extension _AccountScreens on _AccountPageState {
             SettingsGroup(
               caption: 'Support',
               children: [
-                // No support API exists, so there is no ticket state or reply
-                // time to report. Only the published contact details are shown.
-                SettingsTile(
-                  icon: IconsaxPlusLinear.message,
-                  title: 'Chat with support',
-                  subtitle: 'Not available yet',
-                  trailing: SmallPill.unavailable('Unavailable'),
-                  onTap: () => showMessage(
-                    'In-app chat is not available yet. Please call or email '
-                    'support.',
-                  ),
-                ),
                 const SettingsTile(
                   icon: IconsaxPlusLinear.call,
                   title: 'Call customer care',

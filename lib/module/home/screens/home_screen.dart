@@ -70,7 +70,7 @@ extension HomeScreenParts on FlowPageState {
     final displayName = profile?.displayName ?? 'BOCTRUST customer';
     final firstName = profile?.firstName?.trim().isNotEmpty == true
         ? profile!.firstName!.trim()
-        : 'there';
+        : 'Customer';
     final tierSummary = tier?.currentTierSummary;
     final topTier = tier?.tiers.fold<int>(
       0,

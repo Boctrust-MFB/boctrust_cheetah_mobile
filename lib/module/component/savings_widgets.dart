@@ -45,7 +45,6 @@ class FlexSavingsTile extends StatelessWidget {
     required this.balance,
     required this.hidden,
     required this.onTap,
-    this.accountNumber,
     this.rate,
     this.frozen = false,
     super.key,
@@ -57,7 +56,6 @@ class FlexSavingsTile extends StatelessWidget {
   final String? balance;
   final bool hidden;
   final VoidCallback onTap;
-  final String? accountNumber;
   final String? rate;
   final bool frozen;
 
@@ -66,10 +64,6 @@ class FlexSavingsTile extends StatelessWidget {
     final colors = context.bocColors;
     final theme = Theme.of(context);
     final value = balance;
-    final number = accountNumber;
-    final accountHint = number == null
-        ? null
-        : 'Account •••• ${number.substring(number.length > 4 ? number.length - 4 : 0)}';
     return Material(
       color: colors.flexAccent,
       borderRadius: BorderRadius.circular(BocRadius.md),
@@ -118,7 +112,7 @@ class FlexSavingsTile extends StatelessWidget {
                           ),
                         ),
                       ),
-                    if (rate != null || accountHint != null || frozen) ...[
+                    if (rate != null || frozen) ...[
                       const SizedBox(height: BocSpace.sm),
                       Wrap(
                         spacing: BocSpace.sm,
@@ -129,13 +123,6 @@ class FlexSavingsTile extends StatelessWidget {
                           if (rate != null)
                             Text(
                               '$rate% p.a.',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                color: BocColors.navy,
-                              ),
-                            ),
-                          if (accountHint != null)
-                            Text(
-                              accountHint,
                               style: theme.textTheme.labelMedium?.copyWith(
                                 color: BocColors.navy,
                               ),
@@ -174,6 +161,7 @@ class OwnedSavingsTile extends StatelessWidget {
     this.tenureDays,
     this.createdItemCount,
     this.createdItemLabel,
+    this.statusTag,
     this.onTap,
     super.key,
   });
@@ -191,6 +179,7 @@ class OwnedSavingsTile extends StatelessWidget {
   final int? tenureDays;
   final int? createdItemCount;
   final String? createdItemLabel;
+  final String? statusTag;
   final VoidCallback? onTap;
 
   @override
@@ -218,6 +207,10 @@ class OwnedSavingsTile extends StatelessWidget {
               ),
               const SizedBox(width: BocSpace.sm),
               Expanded(child: Text(title, style: theme.textTheme.titleSmall)),
+              if (statusTag case final tag?) ...[
+                SmallPill.unavailable(tag),
+                const SizedBox(width: BocSpace.xs),
+              ],
               if (onTap != null)
                 Icon(
                   IconsaxPlusLinear.arrow_right_3,
@@ -317,6 +310,7 @@ class BankProductCard extends StatelessWidget {
     required this.container,
     required this.onTap,
     this.description,
+    this.statusTag,
     this.facts = const [],
     super.key,
   });
@@ -326,6 +320,7 @@ class BankProductCard extends StatelessWidget {
   final IconData icon;
   final Color accent;
   final Color container;
+  final String? statusTag;
 
   /// Preformatted facts shown as chips under the description.
   final List<({IconData icon, String label})> facts;
@@ -369,7 +364,20 @@ class BankProductCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(title, style: theme.textTheme.titleSmall),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                title,
+                                style: theme.textTheme.titleSmall,
+                              ),
+                            ),
+                            if (statusTag case final tag?) ...[
+                              const SizedBox(width: BocSpace.xs),
+                              SmallPill.unavailable(tag),
+                            ],
+                          ],
+                        ),
                         if (text != null) ...[
                           const SizedBox(height: BocSpace.xxs),
                           Text(
