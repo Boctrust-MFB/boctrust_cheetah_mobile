@@ -730,6 +730,8 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
 
   bool get _amountValid => widget.type == SavingsProductType.smartSave
       ? smartSaveTargetValid(_draft.amount)
+      : widget.type == SavingsProductType.padi
+      ? periodicSavingsAmountValid(_draft.amount)
       : savingsPlanNaira(_draft.amount) != null;
 
   /// Created in Core and funded from Boc Flex.
@@ -747,7 +749,7 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
     _WizardStep.schedule => _draft.tenorDaysOn(DateTime.now()) != null,
     _WizardStep.days when _createsInCore =>
       _draft.frequency != null &&
-          savingsPlanNaira(_draft.recurringAmount) != null,
+          periodicSavingsAmountValid(_draft.recurringAmount),
     _WizardStep.days =>
       _draft.frequency != null &&
           (_draft.frequency == SavingsFrequency.daily ||
@@ -1078,17 +1080,26 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
     hintText: '₦0.00',
     keyboardType: const TextInputType.numberWithOptions(decimal: true),
     inputFormatters: [ThousandsAmountFormatter()],
-    autovalidateMode: widget.type == SavingsProductType.smartSave
+    autovalidateMode:
+        widget.type == SavingsProductType.smartSave ||
+            widget.type == SavingsProductType.padi
         ? AutovalidateMode.onUserInteraction
         : null,
-    validator: widget.type == SavingsProductType.smartSave
+    validator:
+        widget.type == SavingsProductType.smartSave ||
+            widget.type == SavingsProductType.padi
         ? (value) {
             final amount = value ?? '';
             if (savingsPlanNaira(amount) == null) {
-              return 'Enter a valid target amount.';
+              return 'Enter a valid amount.';
             }
-            if (!smartSaveTargetValid(amount)) {
+            if (widget.type == SavingsProductType.smartSave &&
+                !smartSaveTargetValid(amount)) {
               return 'Target amount must be above $_openingAmount.';
+            }
+            if (widget.type == SavingsProductType.padi &&
+                !periodicSavingsAmountValid(amount)) {
+              return 'Each contribution must be at least ₦$minimumPeriodicSavingsNaira.';
             }
             return null;
           }
@@ -1248,6 +1259,18 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
                 decimal: true,
               ),
               inputFormatters: [ThousandsAmountFormatter()],
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+              validator: (value) {
+                final amount = value ?? '';
+                if (savingsPlanNaira(amount) == null) {
+                  return 'Enter a valid amount.';
+                }
+                if (!periodicSavingsAmountValid(amount)) {
+                  return 'Each scheduled save must be at least '
+                      '₦$minimumPeriodicSavingsNaira.';
+                }
+                return null;
+              },
               onChanged: (value) =>
                   _update(_draft.copyWith(recurringAmount: value)),
             ),

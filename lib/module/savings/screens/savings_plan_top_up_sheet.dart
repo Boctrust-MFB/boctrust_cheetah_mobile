@@ -12,6 +12,8 @@ import '../provider/savings_plan_action_provider.dart';
 
 /// The largest top-up the form accepts (in Kobo); Core enforces the real one.
 const _maxTopUpKobo = '100000000000';
+const _minTopUpKobo = '50000';
+const _minTopUpNaira = 500;
 
 /// Tops up [planId] from Boc Flex. The sheet stays open on a failure so the
 /// customer can correct the amount, and ends on the outcome.
@@ -52,6 +54,13 @@ class _SavingsPlanTopUpSheetState extends ConsumerState<SavingsPlanTopUpSheet> {
       case InvalidMoney(:final message):
         setState(() => _error = message);
       case ValidMoney(:final minorUnits):
+        if (BigInt.parse(minorUnits) < BigInt.parse(_minTopUpKobo)) {
+          setState(
+            () =>
+                _error = 'A single deposit must be at least ₦$_minTopUpNaira.',
+          );
+          return;
+        }
         final amount = koboToNaira(minorUnits);
         setState(() {
           _error = null;
@@ -175,6 +184,11 @@ class _SavingsPlanTopUpSheetState extends ConsumerState<SavingsPlanTopUpSheet> {
                 ),
                 inputFormatters: [ThousandsAmountFormatter()],
                 onChanged: (_) => setState(() => _error = null),
+              ),
+              const SizedBox(height: BocSpace.xs),
+              Text(
+                'Minimum single deposit: ₦$_minTopUpNaira.',
+                style: theme.textTheme.bodySmall,
               ),
               if (message != null) ...[
                 const SizedBox(height: BocSpace.xs),

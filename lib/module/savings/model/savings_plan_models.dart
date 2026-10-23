@@ -399,12 +399,22 @@ int daysUntilSavingsDate(DateTime from, DateTime to) => DateTime.utc(
 /// The largest amount a plan form accepts (in Kobo); Core enforces the real
 /// limits.
 const savingsPlanMaxKobo = '100000000000';
+const minimumPeriodicSavingsNaira = 1000;
+const _minimumPeriodicSavingsKobo = '100000';
 
 /// A typed Naira amount as Core's two-decimal string, or null when invalid.
 String? savingsPlanNaira(String text) =>
     switch (parseNairaAmount(text, maxKobo: savingsPlanMaxKobo)) {
       ValidMoney(:final minorUnits) => minorUnits,
       InvalidMoney() => null,
+    };
+
+/// A scheduled contribution must be at least ₦1,000 per save.
+bool periodicSavingsAmountValid(String text) =>
+    switch (parseNairaToKobo(text, maxKobo: savingsPlanMaxKobo)) {
+      ValidMoney(:final minorUnits) =>
+        BigInt.parse(minorUnits) >= BigInt.parse(_minimumPeriodicSavingsKobo),
+      InvalidMoney() => false,
     };
 
 /// A SmartSave target must exceed the amount used to open the goal.
@@ -566,7 +576,11 @@ class SavingsPlanDraft extends Equatable {
       case SavingsProductType.fixed:
         if (autoSave) {
           final recurring = savingsPlanNaira(recurringAmount);
-          if (frequency == null || recurring == null) return null;
+          if (frequency == null ||
+              recurring == null ||
+              !periodicSavingsAmountValid(recurringAmount)) {
+            return null;
+          }
           return CreateSavingsPlanRequest(
             productCode: code,
             tenorDays: tenor,
@@ -592,7 +606,11 @@ class SavingsPlanDraft extends Equatable {
           );
         }
         final recurring = savingsPlanNaira(recurringAmount);
-        if (frequency == null || recurring == null) return null;
+        if (frequency == null ||
+            recurring == null ||
+            !periodicSavingsAmountValid(recurringAmount)) {
+          return null;
+        }
         return CreateSavingsPlanRequest(
           productCode: code,
           tenorDays: tenor,
