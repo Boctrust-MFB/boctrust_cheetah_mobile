@@ -169,8 +169,8 @@ class LoginFlowData extends Equatable {
 
 enum RecoveryFlowStage { idle, awaitingOtp, awaitingNewSecret, completed }
 
-class PasswordRecoveryFlowData extends Equatable {
-  const PasswordRecoveryFlowData({
+class RecoveryFlowData extends Equatable {
+  const RecoveryFlowData({
     this.stage = RecoveryFlowStage.idle,
     this.identifier = '',
     this.identifierType = IdentifierType.unknown,
@@ -185,58 +185,14 @@ class PasswordRecoveryFlowData extends Equatable {
   final String? verificationId;
   final DateTime? otpExpiresAt;
 
-  PasswordRecoveryFlowData copyWith({
+  RecoveryFlowData copyWith({
     RecoveryFlowStage? stage,
     String? identifier,
     IdentifierType? identifierType,
     PhoneVerificationChannel? phoneVerificationChannel,
     String? verificationId,
     DateTime? otpExpiresAt,
-  }) => PasswordRecoveryFlowData(
-    stage: stage ?? this.stage,
-    identifier: identifier ?? this.identifier,
-    identifierType: identifierType ?? this.identifierType,
-    phoneVerificationChannel:
-        phoneVerificationChannel ?? this.phoneVerificationChannel,
-    verificationId: verificationId ?? this.verificationId,
-    otpExpiresAt: otpExpiresAt ?? this.otpExpiresAt,
-  );
-
-  @override
-  List<Object?> get props => [
-    stage,
-    identifier,
-    identifierType,
-    phoneVerificationChannel,
-    verificationId,
-    otpExpiresAt,
-  ];
-}
-
-class PinRecoveryFlowData extends Equatable {
-  const PinRecoveryFlowData({
-    this.stage = RecoveryFlowStage.idle,
-    this.identifier = '',
-    this.identifierType = IdentifierType.unknown,
-    this.phoneVerificationChannel,
-    this.verificationId,
-    this.otpExpiresAt,
-  });
-  final RecoveryFlowStage stage;
-  final String identifier;
-  final IdentifierType identifierType;
-  final PhoneVerificationChannel? phoneVerificationChannel;
-  final String? verificationId;
-  final DateTime? otpExpiresAt;
-
-  PinRecoveryFlowData copyWith({
-    RecoveryFlowStage? stage,
-    String? identifier,
-    IdentifierType? identifierType,
-    PhoneVerificationChannel? phoneVerificationChannel,
-    String? verificationId,
-    DateTime? otpExpiresAt,
-  }) => PinRecoveryFlowData(
+  }) => RecoveryFlowData(
     stage: stage ?? this.stage,
     identifier: identifier ?? this.identifier,
     identifierType: identifierType ?? this.identifierType,
