@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iconsax_plus/iconsax_plus.dart';
 import 'package:image_picker/image_picker.dart';
@@ -20,6 +21,7 @@ import '../provider/core_payments_providers.dart';
 import '../service/scan_bank_matcher.dart';
 import '../service/scan_candidate_extractor.dart';
 import '../service/scan_image_file.dart';
+import '../service/scan_frame_stabilizer.dart';
 import '../service/scan_text_recognizer.dart';
 import 'core_flow_widgets.dart';
 
@@ -90,6 +92,15 @@ class _SnapToPayPageState extends ConsumerState<SnapToPayPage>
   ScanCandidates? _candidates;
   String? _problem;
 
+  /// Accepts a live-scanned number only once it repeats across frames.
+  final _stabilizer = ScanFrameStabilizer();
+
+  /// Set for the session once the device cannot read live frames.
+  bool _liveOff = false;
+  bool _frameBusy = false;
+  DateTime _lastFrame = DateTime.fromMillisecondsSinceEpoch(0);
+  bool _forming = false;
+
   @override
   void initState() {
     super.initState();
@@ -147,11 +158,15 @@ class _SnapToPayPageState extends ConsumerState<SnapToPayPage>
         if (mounted) setState(() => _cameraState = _CameraState.unavailable);
         return;
       }
-      // Photos are read on the device, so small print gets every pixel.
+      // Live frames are read at 1080p; gallery photos are still read at full
+      // size.
       final camera = CameraController(
         back,
-        ResolutionPreset.max,
+        ResolutionPreset.veryHigh,
         enableAudio: false,
+        imageFormatGroup: _isAndroid
+            ? ImageFormatGroup.nv21
+            : ImageFormatGroup.bgra8888,
       );
       await camera.initialize();
       if (!mounted) {
@@ -162,6 +177,9 @@ class _SnapToPayPageState extends ConsumerState<SnapToPayPage>
         _camera = camera;
         _cameraState = _CameraState.ready;
       });
+      if (_candidates == null && _problem == null && _image.path == null) {
+        await _startLive();
+      }
     } on CameraException catch (error) {
       if (mounted) {
         setState(
@@ -173,15 +191,108 @@ class _SnapToPayPageState extends ConsumerState<SnapToPayPage>
     }
   }
 
+  /// Starts reading preview frames for an account number.
+  Future<void> _startLive() async {
+    final camera = _camera;
+    if (_liveOff ||
+        camera == null ||
+        !camera.value.isInitialized ||
+        camera.value.isStreamingImages) {
+      return;
+    }
+    _stabilizer.reset();
+    _forming = false;
+    try {
+      await camera.startImageStream(_onFrame);
+    } on CameraException {
+      // The shutter and gallery still work without live reading.
+    }
+  }
+
+  Future<void> _stopLive() async {
+    final camera = _camera;
+    if (camera == null || !camera.value.isStreamingImages) return;
+    try {
+      await camera.stopImageStream();
+    } on CameraException {
+      // Already stopped or disposed.
+    }
+  }
+
+  Future<void> _onFrame(CameraImage image) async {
+    final camera = _camera;
+    final now = DateTime.now();
+    if (camera == null ||
+        _frameBusy ||
+        _recognizing ||
+        _candidates != null ||
+        _problem != null ||
+        _image.path != null ||
+        now.difference(_lastFrame) < const Duration(milliseconds: 300)) {
+      return;
+    }
+    _frameBusy = true;
+    _lastFrame = now;
+    final scan = _scan;
+    try {
+      final plane = image.planes.first;
+      final lines = await ref
+          .read(scanTextRecognizerProvider)
+          .recognizeFrame(
+            ScanFrame(
+              bytes: plane.bytes,
+              width: image.width,
+              height: image.height,
+              bytesPerRow: plane.bytesPerRow,
+              rotation: camera.description.sensorOrientation,
+              format: _isAndroid
+                  ? ScanFrameFormat.nv21
+                  : ScanFrameFormat.bgra8888,
+            ),
+          );
+      final accepted = _stabilizer.add(extractScanCandidates(lines));
+      if (!mounted || scan != _scan || camera != _camera) return;
+      if (accepted == null) {
+        if (_forming != _stabilizer.forming) {
+          setState(() => _forming = _stabilizer.forming);
+        }
+        return;
+      }
+      await _stopLive();
+      try {
+        await camera.pausePreview();
+      } on CameraException {
+        // The result still opens over a live preview.
+      }
+      await HapticFeedback.mediumImpact();
+      if (!mounted || scan != _scan) return;
+      setState(() {
+        _forming = false;
+        _candidates = accepted;
+      });
+    } on ScanRecognitionFailure catch (failure) {
+      if (failure.message != ScanRecognitionFailure.unreadable) {
+        _liveOff = true;
+        await _stopLive();
+      }
+    } catch (_) {
+      // A frame that fails to read is skipped.
+    } finally {
+      _frameBusy = false;
+    }
+  }
+
   Future<void> _capture() async {
     final camera = _camera;
     if (_recognizing || camera == null || !camera.value.isInitialized) return;
     setState(() => _recognizing = true);
     final XFile photo;
     try {
+      await _stopLive();
       photo = await camera.takePicture();
     } on CameraException {
       if (mounted) setState(() => _recognizing = false);
+      unawaited(_startLive());
       _say("We couldn't take that photo. Try again.");
       return;
     }
@@ -192,6 +303,7 @@ class _SnapToPayPageState extends ConsumerState<SnapToPayPage>
     if (_recognizing) return;
     final photo = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (photo == null) return;
+    await _stopLive();
     await _recognize(photo.path);
   }
 
@@ -228,10 +340,13 @@ class _SnapToPayPageState extends ConsumerState<SnapToPayPage>
 
   /// Reviews a typed number against the full bank list, without the photo's
   /// text.
-  void _enterNumber() => setState(() {
-    _candidates = const ScanCandidates(accountNumbers: [], bankTextLines: []);
-    _problem = null;
-  });
+  void _enterNumber() {
+    unawaited(_stopLive());
+    setState(() {
+      _candidates = const ScanCandidates(accountNumbers: [], bankTextLines: []);
+      _problem = null;
+    });
+  }
 
   /// Drops the photo and returns to the live viewfinder.
   void _retake() {
@@ -241,7 +356,20 @@ class _SnapToPayPageState extends ConsumerState<SnapToPayPage>
       _recognizing = false;
       _candidates = null;
       _problem = null;
+      _forming = false;
     });
+    unawaited(_resumeLive());
+  }
+
+  Future<void> _resumeLive() async {
+    final camera = _camera;
+    if (camera == null || !camera.value.isInitialized) return;
+    try {
+      if (camera.value.isPreviewPaused) await camera.resumePreview();
+    } on CameraException {
+      // Reading below still restarts.
+    }
+    if (mounted) await _startLive();
   }
 
   void _exit() {
@@ -265,6 +393,7 @@ class _SnapToPayPageState extends ConsumerState<SnapToPayPage>
   @override
   Widget build(BuildContext context) {
     final photo = _image.path;
+    final liveResult = photo == null ? _candidates : null;
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -285,8 +414,9 @@ class _SnapToPayPageState extends ConsumerState<SnapToPayPage>
             child: Column(
               children: [
                 _topBar(),
-                if (photo == null || _recognizing) const Spacer(),
-                if (photo == null)
+                if ((photo == null && liveResult == null) || _recognizing)
+                  const Spacer(),
+                if (photo == null && liveResult == null)
                   _controls()
                 else if (!_recognizing)
                   // Scrolls when the keyboard leaves too little room.
@@ -296,7 +426,9 @@ class _SnapToPayPageState extends ConsumerState<SnapToPayPage>
                       child: SingleChildScrollView(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
-                          children: _still(),
+                          children: liveResult == null
+                              ? _still()
+                              : [_result(liveResult)],
                         ),
                       ),
                     ),
@@ -441,10 +573,12 @@ class _SnapToPayPageState extends ConsumerState<SnapToPayPage>
                   ),
                 ),
                 const SizedBox(height: BocSpace.sm),
-                const Text(
-                  'Fit the bank name and account number inside the frame',
+                Text(
+                  _forming
+                      ? 'Hold steady…'
+                      : 'Point at the account number and bank name',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white),
+                  style: const TextStyle(color: Colors.white),
                 ),
               ],
             ),
