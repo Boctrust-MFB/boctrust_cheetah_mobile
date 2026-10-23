@@ -5,6 +5,7 @@ import '../../../app/theme.dart';
 import '../../app_flow/app_ui.dart';
 import '../../onboarding/model/remembered_biometric_profile.dart';
 import '../service/transaction_authorizer.dart';
+import 'transaction_summary_details.dart';
 
 /// What the customer chose on the biometric approval sheet.
 enum BiometricApprovalChoice {
@@ -102,29 +103,7 @@ class _BiometricApprovalSheetState extends State<BiometricApprovalSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            summary.amountDisplay,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.headlineSmall,
-          ),
-          for (final (label, value) in summary.lines)
-            Padding(
-              padding: const EdgeInsets.only(top: BocSpace.xs),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: theme.textTheme.bodyMedium),
-                  const SizedBox(width: BocSpace.md),
-                  Expanded(
-                    child: Text(
-                      value,
-                      textAlign: TextAlign.end,
-                      style: theme.textTheme.bodyLarge,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          TransactionSummaryDetails(summary: summary),
           if (error != null) ...[
             const SizedBox(height: BocSpace.lg),
             Semantics(

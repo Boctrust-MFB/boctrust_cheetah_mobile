@@ -5,6 +5,7 @@ import '../../../app/theme.dart';
 import '../../app_flow/app_ui.dart';
 import '../../component/text_fields.dart';
 import '../service/transaction_authorizer.dart';
+import 'transaction_summary_details.dart';
 
 /// Asks for the customer's four-digit transaction PIN for [summary].
 ///
@@ -112,29 +113,7 @@ class _TransactionPinSheetState extends State<TransactionPinSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            summary.amountDisplay,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.headlineSmall,
-          ),
-          for (final (label, value) in summary.lines)
-            Padding(
-              padding: const EdgeInsets.only(top: BocSpace.xs),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: theme.textTheme.bodyMedium),
-                  const SizedBox(width: BocSpace.md),
-                  Expanded(
-                    child: Text(
-                      value,
-                      textAlign: TextAlign.end,
-                      style: theme.textTheme.bodyLarge,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          TransactionSummaryDetails(summary: summary),
           const SizedBox(height: BocSpace.lg),
           PinInputField(
             pinLength: _pinLength,
