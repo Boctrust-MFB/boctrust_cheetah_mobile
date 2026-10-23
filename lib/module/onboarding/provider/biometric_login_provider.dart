@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../helper/app_open_recency.dart';
 import '../../../helper/biometric_auth_service.dart';
 import '../../../helper/biometric_login_storage.dart';
+import '../../../helper/biometric_operation_result.dart';
 import '../../../utils/auth_input.dart';
 import '../../account/provider/user_providers.dart';
 import '../model/auth_enums.dart';
@@ -14,6 +15,9 @@ import '../model/remembered_biometric_profile.dart';
 import '../service/auth_service.dart';
 import 'auth_session_provider.dart';
 import 'login_flow_provider.dart';
+
+export '../../../helper/biometric_operation_result.dart'
+    show BiometricOperationResult;
 
 enum BiometricLoginPhase {
   hydrating,
@@ -66,23 +70,6 @@ class BiometricLoginState {
     presentation: presentation,
     message: clearMessage ? null : message ?? this.message,
   );
-}
-
-class BiometricOperationResult {
-  const BiometricOperationResult({
-    required this.succeeded,
-    this.cancelled = false,
-    this.message,
-  });
-
-  const BiometricOperationResult.cancelled()
-    : succeeded = false,
-      cancelled = true,
-      message = null;
-
-  final bool succeeded;
-  final bool cancelled;
-  final String? message;
 }
 
 final biometricLoginProvider =
@@ -496,33 +483,7 @@ class BiometricLoginNotifier extends Notifier<BiometricLoginState> {
   );
 
   static BiometricOperationResult _resultFor(BiometricAuthOutcome outcome) =>
-      switch (outcome) {
-        BiometricAuthOutcome.success => const BiometricOperationResult(
-          succeeded: true,
-        ),
-        BiometricAuthOutcome.cancelled =>
-          const BiometricOperationResult.cancelled(),
-        BiometricAuthOutcome.temporaryLockout => const BiometricOperationResult(
-          succeeded: false,
-          message: 'Too many attempts. Try again shortly or use your password.',
-        ),
-        BiometricAuthOutcome.permanentLockout => const BiometricOperationResult(
-          succeeded: false,
-          message:
-              'Biometrics are locked on this device. Unlock your device, or '
-              'use your password.',
-        ),
-        BiometricAuthOutcome.notEnrolled ||
-        BiometricAuthOutcome.unavailable ||
-        BiometricAuthOutcome.unsupported => const BiometricOperationResult(
-          succeeded: false,
-          message: 'Biometrics are not available right now. Use your password.',
-        ),
-        BiometricAuthOutcome.failure => const BiometricOperationResult(
-          succeeded: false,
-          message: 'Biometric check failed. Try again or use your password.',
-        ),
-      };
+      biometricOperationResultFor(outcome, fallbackCredential: 'password');
 
   /// Login failures are already shown by the login flow's own state.
   static BiometricOperationResult _resultForLogin(LoginAttemptResult result) =>

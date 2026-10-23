@@ -5,21 +5,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../helper/app_open_recency.dart';
 import '../../../helper/biometric_auth_service.dart';
+import '../../../helper/biometric_operation_result.dart';
 import '../../../helper/biometric_transfer_storage.dart';
 import '../../../utils/auth_input.dart';
 import '../../account/provider/user_providers.dart';
 import '../../onboarding/model/auth_requests.dart';
 import '../../onboarding/model/remembered_biometric_profile.dart';
 import '../../onboarding/provider/auth_session_provider.dart';
-import '../../onboarding/provider/biometric_login_provider.dart'
-    show BiometricOperationResult;
 import '../../onboarding/service/auth_service.dart';
 import '../model/bill_models.dart';
 import '../model/core_submission_models.dart';
 import 'core_payments_providers.dart';
 import 'core_transfer_attempt_provider.dart';
 
-export '../../onboarding/provider/biometric_login_provider.dart'
+export '../../../helper/biometric_operation_result.dart'
     show BiometricOperationResult;
 
 enum BiometricApprovalPhase {
@@ -548,31 +547,5 @@ class BiometricApprovalNotifier extends Notifier<BiometricApprovalState> {
   );
 
   static BiometricOperationResult _resultFor(BiometricAuthOutcome outcome) =>
-      switch (outcome) {
-        BiometricAuthOutcome.success => const BiometricOperationResult(
-          succeeded: true,
-        ),
-        BiometricAuthOutcome.cancelled =>
-          const BiometricOperationResult.cancelled(),
-        BiometricAuthOutcome.temporaryLockout => const BiometricOperationResult(
-          succeeded: false,
-          message: 'Too many attempts. Try again shortly or use your PIN.',
-        ),
-        BiometricAuthOutcome.permanentLockout => const BiometricOperationResult(
-          succeeded: false,
-          message:
-              'Biometrics are locked on this device. Unlock your device, or '
-              'use your PIN.',
-        ),
-        BiometricAuthOutcome.notEnrolled ||
-        BiometricAuthOutcome.unavailable ||
-        BiometricAuthOutcome.unsupported => const BiometricOperationResult(
-          succeeded: false,
-          message: 'Biometrics are not available right now. Use your PIN.',
-        ),
-        BiometricAuthOutcome.failure => const BiometricOperationResult(
-          succeeded: false,
-          message: 'Biometric check failed. Try again or use your PIN.',
-        ),
-      };
+      biometricOperationResultFor(outcome, fallbackCredential: 'PIN');
 }
