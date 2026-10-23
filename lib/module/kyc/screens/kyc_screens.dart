@@ -393,6 +393,26 @@ extension KycScreens on KycScreenState {
     );
   }
 
+  /// Refresh action, an optional failure card, and the spacer before the
+  /// status-specific content that follows.
+  List<Widget> _kycRefreshAndFailure(
+    NotifierState<KycStatusData> statusState,
+    String? failureReason,
+  ) {
+    return [
+      _kycRefreshAction(statusState),
+      if (failureReason != null) ...[
+        const SizedBox(height: 14),
+        ApiStateCard(
+          title: 'Verification failed',
+          message: failureReason,
+          tone: ApiStateTone.blocked,
+        ),
+      ],
+      const SizedBox(height: 14),
+    ];
+  }
+
   Widget _tiersScreen() {
     final state = ref.watch(userTierProvider);
     final profileState = ref.watch(userProfileProvider);
@@ -670,16 +690,7 @@ extension KycScreens on KycScreenState {
                       '•••• ••• ${status?.identityLast4 ?? flow.identityLast4}',
           ),
           const SizedBox(height: 14),
-          _kycRefreshAction(statusState),
-          if (status?.failureReason != null) ...[
-            const SizedBox(height: 14),
-            ApiStateCard(
-              title: 'Verification failed',
-              message: status!.failureReason!,
-              tone: ApiStateTone.blocked,
-            ),
-          ],
-          const SizedBox(height: 14),
+          ..._kycRefreshAndFailure(statusState, status?.failureReason),
           if (serverStatus == KycVerificationStatus.success)
             const ApiStateCard(
               title: 'Identity verified',
@@ -1098,16 +1109,7 @@ extension KycScreens on KycScreenState {
                   )?.label,
           ),
           const SizedBox(height: 14),
-          _kycRefreshAction(statusState),
-          if (status?.failureReason != null) ...[
-            const SizedBox(height: 14),
-            ApiStateCard(
-              title: 'Verification failed',
-              message: status!.failureReason!,
-              tone: ApiStateTone.blocked,
-            ),
-          ],
-          const SizedBox(height: 14),
+          ..._kycRefreshAndFailure(statusState, status?.failureReason),
           if (serverStatus == KycVerificationStatus.success)
             const ApiStateCard(
               title: 'Document verified',
