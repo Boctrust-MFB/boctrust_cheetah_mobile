@@ -8,9 +8,13 @@ final scanTextRecognizerProvider = Provider<ScanTextRecognizer>(
   (ref) => const ChannelScanTextRecognizer(),
 );
 
-/// Reads the lines of text on a photo. Nothing leaves the phone.
+/// Reads the lines of text on a photo or a live camera frame. Nothing leaves
+/// the phone.
 abstract interface class ScanTextRecognizer {
   Future<List<RecognizedLine>> recognize(String imagePath);
+
+  /// Boxes are measured on the upright frame, as for [recognize].
+  Future<List<RecognizedLine>> recognizeFrame(ScanFrame frame);
 }
 
 /// A recognition failure whose message never contains the image path.
@@ -34,7 +38,24 @@ class ChannelScanTextRecognizer implements ScanTextRecognizer {
   static const _channel = MethodChannel('boctrust/scan_text');
 
   @override
-  Future<List<RecognizedLine>> recognize(String imagePath) async {
+  Future<List<RecognizedLine>> recognize(String imagePath) =>
+      _invoke('recognizeImage', {'path': imagePath});
+
+  @override
+  Future<List<RecognizedLine>> recognizeFrame(ScanFrame frame) =>
+      _invoke('recognizeFrame', {
+        'bytes': frame.bytes,
+        'width': frame.width,
+        'height': frame.height,
+        'bytesPerRow': frame.bytesPerRow,
+        'rotation': frame.rotation,
+        'format': frame.format.name,
+      });
+
+  Future<List<RecognizedLine>> _invoke(
+    String method,
+    Map<String, Object?> arguments,
+  ) async {
     if (kIsWeb ||
         (defaultTargetPlatform != TargetPlatform.android &&
             defaultTargetPlatform != TargetPlatform.iOS)) {
@@ -44,9 +65,7 @@ class ChannelScanTextRecognizer implements ScanTextRecognizer {
     }
     final List<Object?>? result;
     try {
-      result = await _channel.invokeListMethod<Object?>('recognizeImage', {
-        'path': imagePath,
-      });
+      result = await _channel.invokeListMethod<Object?>(method, arguments);
     } on PlatformException {
       // The native message may name the file, so none of it is kept.
       throw const ScanRecognitionFailure(ScanRecognitionFailure.unreadable);

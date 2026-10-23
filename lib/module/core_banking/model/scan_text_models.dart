@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:equatable/equatable.dart';
 
 import 'interbank_models.dart';
@@ -31,6 +33,31 @@ class RecognizedLine extends Equatable {
 
   @override
   List<Object?> get props => [text, box];
+}
+
+/// The pixel layout of a live camera frame.
+enum ScanFrameFormat { nv21, bgra8888 }
+
+/// A raw camera preview frame. [width] and [height] are the sensor frame's,
+/// [bytesPerRow] its row stride, and [rotation] the turn (0, 90, 180 or 270)
+/// that makes the frame upright: the sensor orientation on Android, 0 on iOS
+/// because its frames arrive upright.
+class ScanFrame {
+  const ScanFrame({
+    required this.bytes,
+    required this.width,
+    required this.height,
+    required this.bytesPerRow,
+    required this.rotation,
+    required this.format,
+  });
+
+  final Uint8List bytes;
+  final int width;
+  final int height;
+  final int bytesPerRow;
+  final int rotation;
+  final ScanFrameFormat format;
 }
 
 /// What a scan offers the customer to confirm. Nothing here is sent anywhere
