@@ -332,7 +332,7 @@ class TestOtpBanner extends ConsumerWidget {
                   'TEST MODE',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: colorScheme.onTertiaryContainer,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 2),

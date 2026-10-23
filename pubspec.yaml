@@ -73,14 +73,8 @@ flutter:
           weight: 400
         - asset: assets/font/PlusJakartaSans-Medium.ttf
           weight: 500
-        - asset: assets/font/PlusJakartaSans-Light.ttf
-          weight: 300
-        - asset: assets/font/PlusJakartaSans-ExtraLight.ttf
-          weight: 200
     - family: FHOscar
       fonts:
-        - asset: assets/font/FHOscarTest-Black.otf
-          weight: 900
         - asset: assets/font/FHOscarTest-Bold.otf
           weight: 700
         - asset: assets/font/FHOscarTest-SemiBold.otf
@@ -89,8 +83,6 @@ flutter:
           weight: 500
         - asset: assets/font/FHOscarTest-Regular.otf
           weight: 400
-        - asset: assets/font/FHOscarTest-Light.otf
-          weight: 300
     - family: BocIcons
       fonts:
         - asset: assets/font/BocIcons.ttf
