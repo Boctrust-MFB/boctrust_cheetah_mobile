@@ -23,38 +23,35 @@ class ScanFrameStabilizer {
       _frames.removeFirst();
     }
 
-    final counts = <String, int>{};
-    final seen = <String>[];
-    final lines = <String>[];
-    final seenLines = <String>{};
-    for (final f in _frames) {
-      for (final number in f.accountNumbers.toSet()) {
-        if (!counts.containsKey(number)) seen.add(number);
-        counts[number] = (counts[number] ?? 0) + 1;
-      }
-      for (final line in f.bankTextLines) {
-        if (seenLines.add(line)) lines.add(line);
-      }
-    }
-
     final stable = [
-      for (final number in seen)
-        if (counts[number]! >= required) number,
+      for (final entry in _counts().entries)
+        if (entry.value >= required) entry.key,
     ];
     if (stable.isEmpty) return null;
-    return ScanCandidates(accountNumbers: stable, bankTextLines: lines);
+    final lines = <String>{
+      for (final f in _frames) ...f.bankTextLines,
+    };
+    return ScanCandidates(
+      accountNumbers: stable,
+      bankTextLines: lines.toList(),
+    );
   }
 
   /// True while a number is in the window but none has reached [required].
   bool get forming {
-    if (_frames.isEmpty) return false;
+    final counts = _counts();
+    return counts.isNotEmpty && counts.values.every((c) => c < required);
+  }
+
+  /// How many frames in the window read each number, in first-seen order.
+  Map<String, int> _counts() {
     final counts = <String, int>{};
     for (final f in _frames) {
       for (final number in f.accountNumbers.toSet()) {
         counts[number] = (counts[number] ?? 0) + 1;
       }
     }
-    return counts.isNotEmpty && counts.values.every((c) => c < required);
+    return counts;
   }
 
   /// Clears the window, e.g. when the camera retargets.
