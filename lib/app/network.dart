@@ -10,11 +10,12 @@ import 'session_expiry_coordinator.dart';
 
 typedef ApiDataParser<T> = T Function(Object? data);
 
-final dioProvider = Provider<Dio>((ref) {
-  final storage = ref.watch(secureStorageProvider);
+/// The Dio shared by the User and Core transports: JSON headers, 30 second
+/// timeouts, and the [auth] interceptor followed by logging and activity.
+Dio buildApiDio(String baseUrl, AuthInterceptor auth) {
   final dio = Dio(
     BaseOptions(
-      baseUrl: baseUrl(),
+      baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 30),
       receiveTimeout: const Duration(seconds: 30),
       headers: const {
@@ -24,16 +25,24 @@ final dioProvider = Provider<Dio>((ref) {
     ),
   );
   dio.interceptors.addAll([
+    auth,
+    LoggingInterceptor(includeSensitiveData: Env.isStaging),
+    ActivityInterceptor(),
+  ]);
+  return dio;
+}
+
+final dioProvider = Provider<Dio>((ref) {
+  final storage = ref.watch(secureStorageProvider);
+  return buildApiDio(
+    baseUrl(),
     AuthInterceptor(
       readAccessToken: storage.readAccessToken,
       readCurrentSession: () => ref.read(authSessionProvider),
       expireSessionOnce: () =>
           ref.read(sessionExpiryCoordinatorProvider).expireOnce(),
     ),
-    LoggingInterceptor(includeSensitiveData: Env.isStaging),
-    ActivityInterceptor(),
-  ]);
-  return dio;
+  );
 });
 
 final apiServiceProvider = Provider<ApiService>(

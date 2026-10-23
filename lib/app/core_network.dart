@@ -17,18 +17,8 @@ final coreDioProvider = Provider<Dio?>((ref) {
   final base = coreApiBaseUrl(Env.coreBaseUrl);
   if (base == null) return null;
   final storage = ref.watch(secureStorageProvider);
-  final dio = Dio(
-    BaseOptions(
-      baseUrl: base,
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 30),
-      headers: const {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-    ),
-  );
-  dio.interceptors.addAll([
+  return buildApiDio(
+    base,
     AuthInterceptor(
       readAccessToken: storage.readAccessToken,
       readCurrentSession: () => ref.read(authSessionProvider),
@@ -38,10 +28,7 @@ final coreDioProvider = Provider<Dio?>((ref) {
       isPublicOperation: (_, _) => false,
       expireSessionOnRemote401: false,
     ),
-    LoggingInterceptor(includeSensitiveData: Env.isStaging),
-    ActivityInterceptor(),
-  ]);
-  return dio;
+  );
 });
 
 /// The shared envelope parser over [coreDioProvider], or null when Core is
