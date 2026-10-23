@@ -39,6 +39,10 @@ class _Recognizer implements ScanTextRecognizer {
 
   @override
   Future<List<RecognizedLine>> recognize(String imagePath) => read(imagePath);
+
+  @override
+  Future<List<RecognizedLine>> recognizeFrame(ScanFrame frame) =>
+      throw UnimplementedError();
 }
 
 const _box = ScanTextBox(left: 0, top: 0, width: 1, height: 0.1);
