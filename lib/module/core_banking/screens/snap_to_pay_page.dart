@@ -247,7 +247,8 @@ class _SnapToPayPageState extends ConsumerState<SnapToPayPage>
               width: image.width,
               height: image.height,
               bytesPerRow: plane.bytesPerRow,
-              rotation: camera.description.sensorOrientation,
+              // iOS frames arrive already upright; only Android's need turning.
+              rotation: _isAndroid ? camera.description.sensorOrientation : 0,
               format: _isAndroid
                   ? ScanFrameFormat.nv21
                   : ScanFrameFormat.bgra8888,
@@ -288,6 +289,8 @@ class _SnapToPayPageState extends ConsumerState<SnapToPayPage>
   Future<void> _capture() async {
     final camera = _camera;
     if (_recognizing || camera == null || !camera.value.isInitialized) return;
+    // Drops any frame read still in flight, so it can't land mid-capture.
+    _scan++;
     setState(() => _recognizing = true);
     final XFile photo;
     try {

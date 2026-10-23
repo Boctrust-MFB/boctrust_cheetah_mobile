@@ -39,8 +39,9 @@ class RecognizedLine extends Equatable {
 enum ScanFrameFormat { nv21, bgra8888 }
 
 /// A raw camera preview frame. [width] and [height] are the sensor frame's,
-/// [bytesPerRow] its row stride, and [rotation] the camera's sensor
-/// orientation (0, 90, 180 or 270) that turns the frame upright.
+/// [bytesPerRow] its row stride, and [rotation] the turn (0, 90, 180 or 270)
+/// that makes the frame upright: the sensor orientation on Android, 0 on iOS
+/// because its frames arrive upright.
 class ScanFrame {
   const ScanFrame({
     required this.bytes,
