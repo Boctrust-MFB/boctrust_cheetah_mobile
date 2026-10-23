@@ -242,9 +242,7 @@ extension ContactVerification on ConsumerState {
                       ],
                       const SizedBox(height: 20),
                       PrimaryButton(
-                        label: showingOtp
-                            ? 'Verify code'
-                            : 'Send code',
+                        label: showingOtp ? 'Verify code' : 'Send code',
                         isLoading: state.isLoading,
                         onPressed:
                             state.isLoading || (showingOtp && !awaitingOtp)

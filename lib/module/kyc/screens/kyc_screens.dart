@@ -1790,9 +1790,7 @@ extension KycScreens on KycScreenState {
             ),
             if (busy) ...[
               const SizedBox(height: 12),
-              ApiLoadingSection(
-                label: _uploadStageLabel(flow.stage),
-              ),
+              ApiLoadingSection(label: _uploadStageLabel(flow.stage)),
             ],
             const SizedBox(height: 18),
             PrimaryButton(

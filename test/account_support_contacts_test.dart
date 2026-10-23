@@ -9,10 +9,7 @@ void main() {
   ) async {
     await pumpFlow(tester, route: AppRoutes.account);
 
-    await tester.scrollUntilVisible(
-      find.text('Call customer care'),
-      300,
-    );
+    await tester.scrollUntilVisible(find.text('Call customer care'), 300);
 
     expect(find.text('09064641439'), findsOneWidget);
     expect(find.text('enquiries@boctrustmfb.com'), findsOneWidget);

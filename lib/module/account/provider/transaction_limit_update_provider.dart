@@ -149,6 +149,10 @@ class TransactionLimitUpdateNotifier extends Notifier<LimitUpdateState> {
     if (state.phase != waiting || initiation == null) {
       return const CheckStopped();
     }
+    if (!initiation.supported) {
+      _fail("We couldn't confirm this change's security checks.");
+      return const CheckStopped();
+    }
     if (initiation.isExpiredAt(DateTime.now())) {
       _fail('This change timed out. Start again.');
       return const CheckStopped();
@@ -164,16 +168,11 @@ class TransactionLimitUpdateNotifier extends Notifier<LimitUpdateState> {
     }
     // Swagger: a 409 on a verify step means it was already completed.
     if (result.isDone || result.statusCode == 409) {
-      final pending = result.data?.pending ?? const <CoreTransferCheck>{};
-      if (pending.contains(step) ||
-          pending.contains(CoreTransferCheck.liveness) ||
-          (step == CoreTransferCheck.otp &&
-              pending.contains(CoreTransferCheck.pin)) ||
-          // Initiate asked for an OTP but the PIN reply no longer awaits one.
-          (step == CoreTransferCheck.pin &&
-              initiation.needsOtp &&
-              result.data != null &&
-              !pending.contains(CoreTransferCheck.otp))) {
+      if (coreCheckProgressContradicts(
+        step: step,
+        initiation: initiation,
+        progress: result.data,
+      )) {
         _fail("We couldn't confirm this change's security checks.");
         return const CheckStopped();
       }

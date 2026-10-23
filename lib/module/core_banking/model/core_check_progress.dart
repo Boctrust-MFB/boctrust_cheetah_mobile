@@ -62,3 +62,27 @@ class CoreCheckProgress extends Equatable {
     otpExpiresAt,
   ];
 }
+
+/// Whether a PIN/OTP verify reply contradicts what initiation asked for, so
+/// the flow must stop rather than continue. A null [progress] is treated as an
+/// empty pending set.
+bool coreCheckProgressContradicts({
+  required CoreTransferCheck step,
+  required CoreTransferInitiation initiation,
+  required CoreCheckProgress? progress,
+}) {
+  final pending = progress?.pending ?? const <CoreTransferCheck>{};
+  return pending.contains(CoreTransferCheck.liveness) ||
+      pending.contains(step) ||
+      (step == CoreTransferCheck.otp &&
+          pending.contains(CoreTransferCheck.pin)) ||
+      (step == CoreTransferCheck.pin &&
+          !initiation.needsOtp &&
+          pending.contains(CoreTransferCheck.otp)) ||
+      // Initiate asked for an OTP but the PIN reply no longer awaits one:
+      // never open the OTP sheet for a code that was not sent.
+      (step == CoreTransferCheck.pin &&
+          initiation.needsOtp &&
+          progress != null &&
+          !pending.contains(CoreTransferCheck.otp));
+}

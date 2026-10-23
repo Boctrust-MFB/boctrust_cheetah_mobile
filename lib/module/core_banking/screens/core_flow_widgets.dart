@@ -21,9 +21,9 @@ import '../service/core_transfer_service.dart';
 /// it is, tells the customer instead of starting the flow.
 bool transfersPaused(BuildContext context, WidgetRef ref) {
   if (!ref.read(flexDebitPausedProvider)) return false;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(CoreRejection.sourcePaused.message)),
-  );
+  ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(CoreRejection.sourcePaused.message)));
   return true;
 }
 

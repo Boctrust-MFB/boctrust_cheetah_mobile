@@ -118,6 +118,25 @@ void main() {
     expect(_phase(container), LimitUpdatePhase.failed);
   });
 
+  test('a PIN reply that leaves an unrequested OTP pending stops it', () async {
+    final (:container, :limits) = _setUp();
+    final notifier = container.read(transactionLimitUpdateProvider.notifier);
+    limits.initiation = NotifierState.done(
+      CoreTransferInitiation(
+        reference: 'a1b2c3d4e5f6',
+        checks: const {CoreTransferCheck.pin},
+        expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+      ),
+    );
+    limits.pinReplies.add(_ok(['otp']));
+
+    await notifier.start(_draft);
+
+    expect(await notifier.verifyPin('0007'), const CheckStopped());
+    expect(_phase(container), LimitUpdatePhase.failed);
+    expect(limits.finalized, 0);
+  });
+
   test('a wrong PIN stays on the PIN step', () async {
     final (:container, :limits) = _setUp();
     final notifier = container.read(transactionLimitUpdateProvider.notifier);

@@ -390,21 +390,11 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
     }
     // Swagger: a 409 on a verify step means it was already completed.
     if (result.isDone || result.statusCode == 409) {
-      final pending = result.data?.pending ?? const <CoreTransferCheck>{};
-      final contradicts =
-          pending.contains(CoreTransferCheck.liveness) ||
-          pending.contains(step) ||
-          (step == CoreTransferCheck.otp &&
-              pending.contains(CoreTransferCheck.pin)) ||
-          (step == CoreTransferCheck.pin &&
-              !initiation.needsOtp &&
-              pending.contains(CoreTransferCheck.otp)) ||
-          // Initiate asked for an OTP but the PIN reply no longer awaits one:
-          // never open the OTP sheet for a code that was not sent.
-          (step == CoreTransferCheck.pin &&
-              initiation.needsOtp &&
-              result.data != null &&
-              !pending.contains(CoreTransferCheck.otp));
+      final contradicts = coreCheckProgressContradicts(
+        step: step,
+        initiation: initiation,
+        progress: result.data,
+      );
       if (contradicts) {
         _settle(current, CoreRejection.checksInconsistent);
         return const CheckStopped();
