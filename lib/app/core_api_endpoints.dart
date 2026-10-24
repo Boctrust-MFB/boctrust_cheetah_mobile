@@ -23,6 +23,12 @@ abstract final class CoreApiEndpoints {
   static const bankAccountTransactionsTemplate =
       '$bankAccounts/{accountNumber}/transactions';
 
+  /// GET: a PDF statement of one account over `fromDate`..`toDate`.
+  static String bankAccountStatement(String accountNumber) =>
+      '${bankAccount(accountNumber)}/statement';
+  static const bankAccountStatementTemplate =
+      '$bankAccounts/{accountNumber}/statement';
+
   /// Freezes one of the caller's accounts against debits.
   static String bankAccountFreeze(String accountNumber) =>
       '${bankAccount(accountNumber)}/freeze';
