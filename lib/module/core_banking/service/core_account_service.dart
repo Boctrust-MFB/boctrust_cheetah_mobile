@@ -7,6 +7,7 @@ import '../../../app/network.dart';
 import '../../../app/services.dart';
 import '../model/account_freeze_models.dart';
 import '../model/bank_product_models.dart';
+import '../model/core_account_statement.dart';
 import '../model/core_account_summary.dart';
 import '../model/core_account_transactions.dart';
 import '../model/customer_bank_account_models.dart';
@@ -101,6 +102,37 @@ class CoreAccountService {
           'pageSize': pageSize,
         },
         parser: CoreTransactionPage.fromJson,
+      ),
+    );
+  }
+
+  /// A PDF statement of one of the caller's accounts over
+  /// [fromDate]..[toDate]. A number that is not ten digits, or a range Core
+  /// would reject, is never sent.
+  Future<NotifierState<CoreAccountStatement>> getAccountStatement(
+    String accountNumber, {
+    required DateTime fromDate,
+    required DateTime toDate,
+  }) async {
+    final api = _api;
+    if (api == null) return const NotifierState.blocked(_coreUnavailable);
+    if (!_accountNumber.hasMatch(accountNumber)) {
+      return const NotifierState.error('Account not found.');
+    }
+    final rangeError = coreStatementRangeError(
+      fromDate,
+      toDate,
+      today: DateTime.now(),
+    );
+    if (rangeError != null) return NotifierState.error(rangeError);
+    return NotifierState.fromResponse(
+      await api.getData<CoreAccountStatement>(
+        CoreApiEndpoints.bankAccountStatement(accountNumber),
+        queryParameters: {
+          'fromDate': formatCoreDateOnly(fromDate),
+          'toDate': formatCoreDateOnly(toDate),
+        },
+        parser: CoreAccountStatement.fromJson,
       ),
     );
   }
