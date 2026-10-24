@@ -172,4 +172,21 @@ class CoreSavingsPlanService {
       ),
     );
   }
+
+  /// Soft-deletes a plan with no money in it. Core takes no body: 404 when it
+  /// is not the caller's, 409 when money remains or interest is still being
+  /// paid. Never retried: a delete whose outcome is unknown is reconciled by
+  /// refreshing, not resending.
+  Future<NotifierState<SavingsPlanDeleteResult>> deletePlan(
+    String planId,
+  ) async {
+    final api = _api;
+    if (api == null) return const NotifierState.blocked(_plansUnavailable);
+    return NotifierState.fromResponse(
+      await api.deleteData<SavingsPlanDeleteResult>(
+        CoreApiEndpoints.savingsPlanDelete(planId),
+        parser: SavingsPlanDeleteResult.fromJson,
+      ),
+    );
+  }
 }

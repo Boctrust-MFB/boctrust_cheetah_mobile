@@ -307,6 +307,46 @@ class SavingsPlanDetail extends Equatable {
   List<Object?> get props => [plan, events, accountNumber];
 }
 
+/// What Core reports after a soft delete. [status] and [deletedAt] are kept
+/// for the record only; nothing is driven from them.
+class SavingsPlanDeleteResult extends Equatable {
+  const SavingsPlanDeleteResult({
+    required this.planId,
+    this.status,
+    this.deletedAt,
+  });
+
+  final String planId;
+
+  /// `matured`, `liquidated` or `cancelled`; null when absent or not one of
+  /// those.
+  final SavingsPlanStatus? status;
+  final DateTime? deletedAt;
+
+  /// Throws [FormatException] when [value] is not an object with a `planId`.
+  factory SavingsPlanDeleteResult.fromJson(Object? value) {
+    final planId = value is Map ? coreText(value['planId']) : null;
+    if (value is! Map || planId == null) {
+      throw const FormatException('Invalid delete result.');
+    }
+    final status = SavingsPlanStatus.parse(value['status']);
+    final deletedAt = value['deletedAt'];
+    return SavingsPlanDeleteResult(
+      planId: planId,
+      status: switch (status) {
+        SavingsPlanStatus.matured ||
+        SavingsPlanStatus.liquidated ||
+        SavingsPlanStatus.cancelled => status,
+        _ => null,
+      },
+      deletedAt: deletedAt is String ? DateTime.tryParse(deletedAt) : null,
+    );
+  }
+
+  @override
+  List<Object?> get props => [planId, status, deletedAt];
+}
+
 /// What Core reports after a plan action (top-up, early withdrawal,
 /// creation). Amounts are Naira decimal strings; any may be absent.
 class SavingsPlanActionResult extends Equatable {
