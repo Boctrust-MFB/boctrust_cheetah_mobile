@@ -4,17 +4,12 @@ import '../../../app/core_api_endpoints.dart';
 import '../../../app/core_network.dart';
 import '../../../app/network.dart';
 import '../../../app/services.dart';
+import '../../core_banking/model/core_account_statement.dart';
 import '../../core_banking/model/core_json.dart';
 import '../model/interest_accrual_models.dart';
 import '../model/savings_plan_models.dart';
 
 const _plansUnavailable = 'Savings plans are not available right now.';
-
-/// A calendar date as Core's `YYYY-MM-DD`.
-String _isoDate(DateTime date) =>
-    '${date.year.toString().padLeft(4, '0')}-'
-    '${date.month.toString().padLeft(2, '0')}-'
-    '${date.day.toString().padLeft(2, '0')}';
 
 final coreSavingsPlanServiceProvider = Provider<CoreSavingsPlanService>(
   (ref) => CoreSavingsPlanService(ref.watch(coreApiServiceProvider)),
@@ -108,7 +103,7 @@ class CoreSavingsPlanService {
         CoreApiEndpoints.savingsProductQuote(productCode),
         queryParameters: endDate == null
             ? {'tenorDays': tenorDays}
-            : {'endDate': _isoDate(endDate)},
+            : {'endDate': formatCoreDateOnly(endDate)},
         parser: SavingsPlanQuote.fromJson,
       ),
     );

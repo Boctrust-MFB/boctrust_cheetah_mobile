@@ -908,7 +908,9 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
   /// Shown on the confirm step when another savings action is sending.
   String? _busy;
 
-  Future<bool> _confirmOpeningTransfer() async {
+  Future<bool> _confirmOpeningTransfer(String amount) async {
+    final openingAmount =
+        formatApiAmount(amount, currency: 'NGN') ?? _naira(amount);
     final name = _draft.name.trim();
     return await showDialog<bool>(
           context: context,
@@ -924,11 +926,11 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
                 ],
                 Text(
                   widget.type == SavingsProductType.smartSave
-                      ? 'Creating this goal moves $_openingAmount from Boc '
+                      ? 'Creating this goal moves $openingAmount from Boc '
                             'Flex Savings into the new plan. This is its '
                             'minimum opening balance for the duration you '
                             'chose.'
-                      : 'Creating this $_planKind moves $_openingAmount '
+                      : 'Creating this $_planKind moves $openingAmount '
                             'from Boc Flex Savings into the new plan.',
                 ),
               ],
@@ -1019,7 +1021,9 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
       setState(() => _busy = savingsPlanBusyMessage);
       return;
     }
-    if (_createsInCore && !await _confirmOpeningTransfer()) return;
+    if (_createsInCore && !await _confirmOpeningTransfer(request.amount)) {
+      return;
+    }
     if (!mounted) return;
     if (ref.read(savingsPlanActionProvider).busyFor(SavingsPlanAction.create)) {
       setState(() => _busy = savingsPlanBusyMessage);
@@ -1066,7 +1070,9 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
     final key = _quoteKey;
     final quote = key == null ? null : ref.watch(savingsPlanQuoteProvider(key));
     _quoteState = quote;
-    _quote = quote?.value?.data;
+    _quote = quote == null || quote.isLoading || quote.hasError
+        ? null
+        : quote.value?.data;
     return catalogue;
   }
 
