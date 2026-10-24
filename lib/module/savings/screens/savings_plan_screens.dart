@@ -714,6 +714,7 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
     ],
     SavingsProductType.fixed => [
       _WizardStep.schedule,
+      _WizardStep.amount,
       if (_draft.autoSave) _WizardStep.days,
       _WizardStep.confirm,
     ],
@@ -728,25 +729,82 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
 
   _WizardStep get _step => _steps[_index];
 
-  bool get _amountValid => widget.type == SavingsProductType.smartSave
-      ? smartSaveTargetValid(_draft.amount)
-      : widget.type == SavingsProductType.padi
-      ? periodicSavingsAmountValid(_draft.amount)
-      : savingsPlanNaira(_draft.amount) != null;
+  /// The SmartSave target is checked against the quote on the schedule step;
+  /// the Fixed principal is checked against it here.
+  bool get _amountValid => switch (widget.type) {
+    SavingsProductType.smartSave => savingsPlanNaira(_draft.amount) != null,
+    SavingsProductType.fixed => _quote?.acceptsDeposit(_draft.amount) ?? false,
+    SavingsProductType.padi => periodicSavingsAmountValid(_draft.amount),
+    SavingsProductType.flex => savingsPlanNaira(_draft.amount) != null,
+  };
 
   /// Created in Core and funded from Boc Flex.
   bool get _createsInCore => widget.type.coreCode != null;
 
+  /// Core's catalogue row for this product, as of the last build.
+  SavingsPlanProduct? _product;
+
+  /// Core's quote for the chosen duration, as of the last build.
+  SavingsPlanQuote? _quote;
+  AsyncValue<NotifierState<SavingsPlanQuote>>? _quoteState;
+
+  /// The quote request for the chosen duration: its days for a preset, the
+  /// date for a custom maturity date. Null until a duration within the
+  /// product's bounds is chosen.
+  SavingsQuoteKey? get _quoteKey {
+    final product = _product;
+    if (product == null) return null;
+    if (_draft.tenorDaysOn(DateTime.now(), product) == null) return null;
+    final custom = _draft.customMaturityDate;
+    return custom == null
+        ? (
+            productCode: product.productCode,
+            tenorDays: savingsMonthPresetDays[_draft.durationMonths],
+            endDate: null,
+          )
+        : (
+            productCode: product.productCode,
+            tenorDays: null,
+            endDate: DateTime(custom.year, custom.month, custom.day),
+          );
+  }
+
+  /// The first deposit Core moves from Boc Flex, and the `amount` sent:
+  /// the quote's minimum for SmartSave, the typed principal for Fixed.
+  String? get _openingNaira => widget.type == SavingsProductType.fixed
+      ? savingsPlanNaira(_draft.amount)
+      : _quote?.minAmount;
+
   String get _openingAmount =>
-      formatApiAmount('${widget.type.openingMinimumNaira}', currency: 'NGN')!;
+      formatApiAmount(_openingNaira, currency: 'NGN') ?? 'the first deposit';
+
+  String _naira(String amount) =>
+      formatApiAmount(amount, currency: 'NGN') ?? '₦$amount';
 
   String get _planKind =>
       widget.type == SavingsProductType.fixed ? 'deposit' : 'goal';
 
+  /// Why the SmartSave target does not fit the quote, or null when it does.
+  String? get _targetProblem {
+    final quote = _quote;
+    if (widget.type != SavingsProductType.smartSave || quote == null) {
+      return null;
+    }
+    if (quote.acceptsTarget(_draft.amount)) return null;
+    final max = quote.maxAmount;
+    if (max != null && quote.exceedsMax(_draft.amount)) {
+      return "Your target can't be more than ${_naira(max)} for this "
+          'duration. Go back to change it.';
+    }
+    return 'Your target must be above the ${_naira(quote.minAmount)} '
+        'opening deposit. Go back to change it.';
+  }
+
   bool get _stepValid => switch (_step) {
+    _ when _createsInCore && _product == null => false,
     _WizardStep.goal => _draft.name.trim().isNotEmpty && _amountValid,
     _WizardStep.amount => _amountValid,
-    _WizardStep.schedule => _draft.tenorDaysOn(DateTime.now()) != null,
+    _WizardStep.schedule => _quote != null && _targetProblem == null,
     _WizardStep.days when _createsInCore =>
       _draft.frequency != null &&
           periodicSavingsAmountValid(_draft.recurringAmount),
@@ -765,13 +823,18 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
   void _update(SavingsPlanDraft next) => setState(() => _draft = next);
 
   Future<void> _pickMaturityDate() async {
+    final product = _product;
+    if (product == null) return;
     final today = DateTime.now();
-    final minimum = minimumSavingsTenorDays(widget.type);
-    final firstDate = DateTime(today.year, today.month, today.day + minimum);
+    final firstDate = DateTime(
+      today.year,
+      today.month,
+      today.day + product.shortestTenorDays,
+    );
     final lastDate = DateTime(
       today.year,
       today.month,
-      today.day + maximumSavingsTenorDays,
+      today.day + product.longestTenorDays,
     );
     final selected = _draft.customMaturityDate;
     final picked = await showDatePicker(
@@ -810,9 +873,13 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
                   const SizedBox(height: BocSpace.sm),
                 ],
                 Text(
-                  'Creating this $_planKind moves $_openingAmount from '
-                  'Boc Flex Savings into the new plan. This is its minimum '
-                  'opening balance.',
+                  widget.type == SavingsProductType.smartSave
+                      ? 'Creating this goal moves $_openingAmount from Boc '
+                            'Flex Savings into the new plan. This is its '
+                            'minimum opening balance for the duration you '
+                            'chose.'
+                      : 'Creating this $_planKind moves $_openingAmount '
+                            'from Boc Flex Savings into the new plan.',
                 ),
               ],
             ),
@@ -846,8 +913,8 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
         ),
         content: Text(
           insufficient
-              ? 'You need at least $_openingAmount in Boc Flex Savings to '
-                    'open this $_planKind. Add money to Boc Flex and try again.'
+              ? 'You need $_openingAmount in Boc Flex Savings to open this '
+                    '$_planKind. Add money to Boc Flex and try again.'
               : message ?? 'Please try again.',
         ),
         actions: [
@@ -879,26 +946,22 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
       setState(() => _index++);
       return;
     }
-    if (_draft.tenorDaysOn(DateTime.now()) == null && _createsInCore) {
-      setState(() => _index = _steps.indexOf(_WizardStep.schedule));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Choose a date between '
-            '${minimumSavingsTenorDays(widget.type)} days and 1 year from today.',
-          ),
-        ),
-      );
-      return;
-    }
     final capability = widget.type.createCapability;
-    final request = _draft.toCreateRequest();
     if (capability == null ||
         !ref.read(featureAvailabilityProvider(capability)).isAvailable ||
-        request == null) {
+        !_createsInCore) {
       await BocUnavailableSheet.show(
         context,
         title: '${widget.type.displayName} is not available yet',
+      );
+      return;
+    }
+    final quote = _quote;
+    final request = quote == null ? null : _draft.toCreateRequest(quote);
+    if (request == null) {
+      setState(() => _index = _steps.indexOf(_WizardStep.schedule));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Check the duration and amount.')),
       );
       return;
     }
@@ -941,9 +1004,58 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
     }
   }
 
+  /// Watches the catalogue and the chosen duration's quote on every step, so
+  /// neither is dropped and re-read between steps, and returns the catalogue
+  /// state; null for a product not created in Core.
+  AsyncValue<NotifierState<List<SavingsPlanProduct>>>? _watchCoreTerms() {
+    if (!_createsInCore) return null;
+    final catalogue = ref.watch(savingsPlanProductsProvider);
+    _product = catalogue.value?.data
+        ?.where((product) => product.productCode == widget.type.coreCode)
+        .firstOrNull;
+    final key = _quoteKey;
+    final quote = key == null ? null : ref.watch(savingsPlanQuoteProvider(key));
+    _quoteState = quote;
+    _quote = quote?.value?.data;
+    return catalogue;
+  }
+
+  /// Stands in for the steps until Core's catalogue has this product.
+  Widget? _catalogueGate(
+    AsyncValue<NotifierState<List<SavingsPlanProduct>>>? catalogue,
+  ) {
+    if (catalogue == null || _product != null) return null;
+    return switch (catalogue) {
+      _ when catalogue.isLoading => const ApiLoadingSection(
+        label: 'Loading plan options',
+      ),
+      AsyncData(:final value) when value.data != null => ApiStateCard(
+        title: '${widget.type.displayName} is not available',
+        message: 'New plans cannot be opened on this product right now.',
+        tone: ApiStateTone.info,
+      ),
+      AsyncData(:final value) => ApiStateCard(
+        title: 'Plan options unavailable',
+        message: value.message ?? "We couldn't load this product's terms.",
+        tone: ApiStateTone.error,
+        actionLabel: 'Retry',
+        onAction: () => ref.invalidate(savingsPlanProductsProvider),
+      ),
+      AsyncError() => ApiStateCard(
+        title: 'Plan options unavailable',
+        message: "We couldn't load this product's terms.",
+        tone: ApiStateTone.error,
+        actionLabel: 'Retry',
+        onAction: () => ref.invalidate(savingsPlanProductsProvider),
+      ),
+      _ => const ApiLoadingSection(label: 'Loading plan options'),
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final gate = _catalogueGate(_watchCoreTerms());
     final steps = _steps;
     final action = ref
         .watch(savingsPlanActionProvider)
@@ -1000,7 +1112,7 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
                 Expanded(
                   child: ListView(
                     padding: const EdgeInsets.all(BocSpace.gutter),
-                    children: _stepBody(theme),
+                    children: gate == null ? _stepBody(theme) : [gate],
                   ),
                 ),
                 Padding(
@@ -1074,36 +1186,111 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
     child: Text(text, style: theme.textTheme.labelMedium),
   );
 
+  /// The chosen duration's quote: loading, Core's refusal with a retry, or
+  /// the terms Core applies to it.
+  List<Widget> _quoteSection(ThemeData theme) {
+    final key = _quoteKey;
+    final state = _quoteState;
+    if (key == null || state == null) return const [];
+    ApiStateCard refused(String? message) => ApiStateCard(
+      title: 'Duration unavailable',
+      message: message ?? "We couldn't check this duration.",
+      tone: ApiStateTone.error,
+      actionLabel: 'Retry',
+      onAction: () => ref.invalidate(savingsPlanQuoteProvider(key)),
+    );
+    final quote = _quote;
+    final problem = _targetProblem;
+    return [
+      const SizedBox(height: BocSpace.md),
+      switch (state) {
+        _ when state.isLoading => const ApiLoadingSection(
+          label: 'Checking this duration',
+          compact: true,
+        ),
+        AsyncData() when quote != null => SavingsFactGroup(
+          title: 'For this duration',
+          rows: _quoteRows(quote),
+        ),
+        AsyncData(:final value) => refused(value.message),
+        _ => refused(null),
+      },
+      if (problem != null) ...[
+        const SizedBox(height: BocSpace.xs),
+        Semantics(
+          liveRegion: true,
+          child: Text(
+            problem,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: context.bocColors.errorText,
+            ),
+          ),
+        ),
+      ],
+    ];
+  }
+
+  /// What Core applies to the chosen duration, as its quote states it;
+  /// [withLimits] adds the first-deposit minimum and maximum.
+  List<({String label, String value})> _quoteRows(
+    SavingsPlanQuote quote, {
+    bool withLimits = true,
+  }) {
+    final fixed = widget.type == SavingsProductType.fixed;
+    final max = quote.maxAmount;
+    return [
+      (
+        label: 'Maturity date',
+        value: DateFormat('d MMM yyyy').format(quote.endDate),
+      ),
+      (label: 'Interest rate', value: '${quote.interestRatePercent}% p.a.'),
+      (
+        label: 'Early withdrawal fee',
+        value: '${quote.earlyWithdrawalFeePercent}% of interest',
+      ),
+      if (withLimits) ...[
+        (
+          label: fixed ? 'Minimum deposit' : 'Opening deposit',
+          value: _naira(quote.minAmount),
+        ),
+        if (max != null)
+          (
+            label: fixed ? 'Maximum deposit' : 'Maximum target',
+            value: _naira(max),
+          ),
+      ],
+    ];
+  }
+
   Widget _amountField(String label) => AppTextField(
     label: label,
     controller: _amount,
     hintText: '₦0.00',
     keyboardType: const TextInputType.numberWithOptions(decimal: true),
     inputFormatters: [ThousandsAmountFormatter()],
-    autovalidateMode:
-        widget.type == SavingsProductType.smartSave ||
-            widget.type == SavingsProductType.padi
-        ? AutovalidateMode.onUserInteraction
-        : null,
-    validator:
-        widget.type == SavingsProductType.smartSave ||
-            widget.type == SavingsProductType.padi
-        ? (value) {
-            final amount = value ?? '';
-            if (savingsPlanNaira(amount) == null) {
-              return 'Enter a valid amount.';
-            }
-            if (widget.type == SavingsProductType.smartSave &&
-                !smartSaveTargetValid(amount)) {
-              return 'Target amount must be above $_openingAmount.';
-            }
-            if (widget.type == SavingsProductType.padi &&
-                !periodicSavingsAmountValid(amount)) {
-              return 'Each contribution must be at least ₦$minimumPeriodicSavingsNaira.';
-            }
-            return null;
-          }
-        : null,
+    autovalidateMode: AutovalidateMode.onUserInteraction,
+    validator: (value) {
+      final amount = value ?? '';
+      if (savingsPlanNaira(amount) == null) {
+        return 'Enter a valid amount.';
+      }
+      final quote = _quote;
+      if (widget.type == SavingsProductType.fixed && quote != null) {
+        final max = quote.maxAmount;
+        if (max != null && quote.exceedsMax(amount)) {
+          return 'The most you can lock for this term is ${_naira(max)}.';
+        }
+        if (!quote.acceptsDeposit(amount)) {
+          return 'The least you can lock for this term is '
+              '${_naira(quote.minAmount)}.';
+        }
+      }
+      if (widget.type == SavingsProductType.padi &&
+          !periodicSavingsAmountValid(amount)) {
+        return 'Each contribution must be at least ₦$minimumPeriodicSavingsNaira.';
+      }
+      return null;
+    },
     onChanged: (value) => _update(_draft.copyWith(amount: value)),
   );
 
@@ -1120,26 +1307,46 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
           ),
           const SizedBox(height: BocSpace.md),
           _amountField('Target amount'),
-          const SizedBox(height: BocSpace.md),
-          SavingsCallout(
-            icon: IconsaxPlusLinear.wallet_2,
-            title: 'Minimum opening balance: $_openingAmount',
-            body:
-                'When you create this goal, we move this amount from '
-                'Boc Flex Savings. Your target amount must be above '
-                '$_openingAmount.',
-          ),
+          if (_product?.lowestMinAmount case final lowest?) ...[
+            const SizedBox(height: BocSpace.md),
+            SavingsCallout(
+              icon: IconsaxPlusLinear.wallet_2,
+              title: 'Minimum opening balance: from ${_naira(lowest)}',
+              body:
+                  'When you create this goal, we move its minimum opening '
+                  'balance from Boc Flex Savings. The exact amount depends '
+                  'on how long you save, and your target must be above it.',
+            ),
+          ],
         ];
       case _WizardStep.amount:
+        final quote = _quote;
+        final max = quote?.maxAmount;
         return [
           _heading(
             theme,
             'How much do you want to lock?',
-            'Your money earns a fixed rate until the end of the term.',
+            'Your money earns a fixed rate until the end of the term. We '
+                'move this amount from Boc Flex Savings when you create the '
+                'deposit.',
           ),
           _amountField('Amount'),
+          if (quote != null) ...[
+            const SizedBox(height: BocSpace.xs),
+            Text(
+              max == null
+                  ? 'At least ${_naira(quote.minAmount)} for this term.'
+                  : 'Between ${_naira(quote.minAmount)} and ${_naira(max)} '
+                        'for this term.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
         ];
       case _WizardStep.schedule:
+        final product = _product;
+        final presets = product?.presetMonths ?? const <int>[];
+        final longest = product?.longestTenorDays;
+        final latest = longest == 365 ? '1 year' : '$longest days';
         return [
           _heading(
             theme,
@@ -1147,22 +1354,22 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
                 ? 'Choose a term'
                 : 'How long will you save?',
           ),
-          BocChoiceChips<int>(
-            options: const [
-              (value: 3, label: '3 months'),
-              (value: 6, label: '6 months'),
-              (value: 9, label: '9 months'),
-              (value: 12, label: '12 months'),
-            ],
-            selected: {?_draft.durationMonths},
-            onChanged: (value) => _update(
-              _draft.copyWith(
-                durationMonths: value.first,
-                clearCustomMaturityDate: true,
+          if (presets.isNotEmpty) ...[
+            BocChoiceChips<int>(
+              options: [
+                for (final months in presets)
+                  (value: months, label: '$months months'),
+              ],
+              selected: {?_draft.durationMonths},
+              onChanged: (value) => _update(
+                _draft.copyWith(
+                  durationMonths: value.first,
+                  clearCustomMaturityDate: true,
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: BocSpace.md),
+            const SizedBox(height: BocSpace.md),
+          ],
           InkWell(
             borderRadius: BorderRadius.circular(BocRadius.sm),
             onTap: _pickMaturityDate,
@@ -1181,12 +1388,13 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
             ),
           ),
           const SizedBox(height: BocSpace.xs),
-          Text(
-            'Earliest date: '
-            '${minimumSavingsTenorDays(widget.type)} days from today. '
-            'Latest date: 1 year from today.',
-            style: theme.textTheme.bodySmall,
-          ),
+          if (product != null)
+            Text(
+              'Earliest date: ${product.shortestTenorDays} days from today. '
+              'Latest date: $latest from today.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ..._quoteSection(theme),
           if (_createsInCore) ...[
             const SizedBox(height: BocSpace.md),
             SettingsGroup(
@@ -1212,23 +1420,12 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
             widget.type == SavingsProductType.fixed
                 ? 'Withdrawing before the end of the term pays your deposit '
                       'and the interest earned so far, minus an early '
-                      'withdrawal fee. Your rate and maturity date show on '
-                      'the deposit once it is created.'
+                      'withdrawal fee.'
                 : 'Withdrawing before your target date pays your savings '
                       'and the interest earned so far, minus an early '
                       'withdrawal fee.',
             style: theme.textTheme.bodySmall,
           ),
-          if (widget.type == SavingsProductType.fixed) ...[
-            const SizedBox(height: BocSpace.md),
-            SavingsCallout(
-              icon: IconsaxPlusLinear.wallet_2,
-              title: 'Minimum opening balance: $_openingAmount',
-              body:
-                  'When you create this deposit, we move this amount from '
-                  'Boc Flex Savings.',
-            ),
-          ],
         ];
       case _WizardStep.days:
         final frequency = _draft.frequency;
@@ -1388,6 +1585,7 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
         if (widget.type == SavingsProductType.smartSave || fixed) {
           final months = _draft.durationMonths;
           final customDate = _draft.customMaturityDate;
+          final quote = _quote;
           final recurring = formatApiAmount(
             savingsPlanNaira(_draft.recurringAmount),
             currency: 'NGN',
@@ -1446,18 +1644,13 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
             SavingsFactGroup(
               title: fixed ? 'Deposit details' : 'Saving plan',
               rows: [
-                if (months != null)
+                if (fixed && _openingNaira != null)
+                  (label: 'Deposit', value: _openingAmount),
+                if (customDate == null && months != null)
                   (label: 'Duration', value: '$months months'),
-                if (customDate != null) ...[
-                  (
-                    label: 'Duration',
-                    value: '${_draft.tenorDaysOn(DateTime.now())} days',
-                  ),
-                  (
-                    label: 'Target maturity date',
-                    value: DateFormat('d MMM yyyy').format(customDate),
-                  ),
-                ],
+                if (customDate != null && quote != null)
+                  (label: 'Duration', value: '${quote.tenorDays} days'),
+                if (quote != null) ..._quoteRows(quote, withLimits: false),
                 if (fixed)
                   (
                     label: 'Recurring payments',
@@ -1479,9 +1672,12 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
               SavingsCallout(
                 icon: IconsaxPlusLinear.wallet_2,
                 title: '$_openingAmount from Boc Flex Savings',
-                body:
-                    'Creating this $_planKind moves the minimum opening '
-                    'balance from Boc Flex Savings into your new plan.',
+                body: fixed
+                    ? 'Creating this deposit moves this amount from Boc Flex '
+                          'Savings into your new plan.'
+                    : 'Creating this goal moves the minimum opening balance '
+                          'for this duration from Boc Flex Savings into your '
+                          'new plan.',
               ),
             ],
           ];

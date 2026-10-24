@@ -71,6 +71,65 @@ class _Plans extends CoreSavingsPlanService {
   }
 
   @override
+  Future<NotifierState<List<SavingsPlanProduct>>> getSavingsProducts() async =>
+      const NotifierState.done([
+        SavingsPlanProduct(
+          productCode: 'bocSmartSave',
+          productName: 'Boc SmartSave',
+          planType: 'target_savings',
+          earlyWithdrawalFeePercent: '10',
+          minTenorDays: 90,
+          maxTenorDays: 365,
+          tenors: [
+            SavingsPlanTenor(
+              tenorDays: 90,
+              interestRatePercent: '8',
+              minAmount: '5000.00',
+            ),
+          ],
+        ),
+        SavingsPlanProduct(
+          productCode: 'boctrustFixedDeposit',
+          productName: 'Boc Fixed Deposit',
+          planType: 'fixed_deposit',
+          earlyWithdrawalFeePercent: '10',
+          minTenorDays: 30,
+          maxTenorDays: 365,
+          tenors: [
+            SavingsPlanTenor(
+              tenorDays: 30,
+              interestRatePercent: '10',
+              minAmount: '1000.00',
+            ),
+          ],
+        ),
+      ]);
+
+  @override
+  Future<NotifierState<SavingsPlanQuote>> quoteSavingsProduct(
+    String productCode, {
+    int? tenorDays,
+    DateTime? endDate,
+  }) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final days = tenorDays ?? daysUntilSavingsDate(today, endDate!);
+    final smartSave = productCode == 'bocSmartSave';
+    return NotifierState.done(
+      SavingsPlanQuote(
+        productCode: productCode,
+        productName: smartSave ? 'Boc SmartSave' : 'Boc Fixed Deposit',
+        tenorDays: days,
+        startDate: today,
+        endDate: endDate ?? DateTime(today.year, today.month, today.day + days),
+        interestRatePercent: smartSave ? '8' : '10',
+        minAmount: smartSave ? '5000.00' : '1000.00',
+        earlyWithdrawalFeePercent: '10',
+      ),
+    );
+  }
+
+  @override
   Future<NotifierState<List<SavingsProductGroup>>> getPlans(
     SavingsProductType product,
   ) async => const NotifierState.done([
@@ -458,6 +517,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('6 months'));
     await tester.pump();
+    await tester.pump();
     await tester.tap(find.text('Continue'));
     await tester.pump();
   }
@@ -470,18 +530,30 @@ void main() {
       create: true,
     );
 
+    const problem =
+        'Your target must be above the ₦5,000.00 opening deposit. '
+        'Go back to change it.';
     await tester.enterText(find.byType(TextField).at(0), 'Rent');
     await tester.enterText(find.byType(TextField).at(1), '5,000');
     await tester.pump();
-    expect(find.text('Target amount must be above ₦5,000.00.'), findsOneWidget);
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+    await tester.tap(find.text('6 months'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text(problem), findsOneWidget);
     expect(
       tester.widget<PrimaryButton>(find.byType(PrimaryButton)).onPressed,
       isNull,
     );
 
+    await tester.tap(find.bySemanticsLabel('Back'));
+    await tester.pump();
     await tester.enterText(find.byType(TextField).at(1), '5,000.01');
     await tester.pump();
-    expect(find.text('Target amount must be above ₦5,000.00.'), findsNothing);
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+    expect(find.text(problem), findsNothing);
     expect(
       tester.widget<PrimaryButton>(find.byType(PrimaryButton)).onPressed,
       isNotNull,
@@ -504,6 +576,7 @@ void main() {
     await tester.tap(find.text('Continue'));
     await tester.pump();
     await tester.tap(find.text('6 months'));
+    await tester.pump();
     await tester.pump();
     await tester.tap(find.text('Continue'));
     await tester.pump();
@@ -590,8 +663,13 @@ void main() {
     _createdRequests.clear();
     await _open(tester, AppRoutes.lockCreate, const _Plans(), create: true);
 
-    expect(find.textContaining('₦1,000'), findsWidgets);
     await tester.tap(find.text('3 months'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining('₦1,000'), findsWidgets);
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), '1,000');
     await tester.pump();
     await tester.tap(find.text('Continue'));
     await tester.pump();
@@ -627,7 +705,12 @@ void main() {
     );
     await tester.tap(find.text('3 months'));
     await tester.pump();
+    await tester.pump();
     await tester.tap(find.text('Set recurring payments'));
+    await tester.pump();
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), '1,000');
     await tester.pump();
     await tester.tap(find.text('Continue'));
     await tester.pump();
@@ -663,10 +746,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continue'));
     await tester.pump();
+    await tester.enterText(find.byType(TextField), '1,000');
+    await tester.pump();
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
 
     expect(find.text('Review your deposit'), findsOneWidget);
     expect(find.text('30 days'), findsOneWidget);
-    expect(find.text('Target maturity date'), findsOneWidget);
+    expect(find.text('Maturity date'), findsOneWidget);
   });
 
   testWidgets('SmartSave accepts a custom date from day 90', (tester) async {
@@ -692,7 +779,7 @@ void main() {
 
     expect(find.text('Review your goal'), findsOneWidget);
     expect(find.text('90 days'), findsOneWidget);
-    expect(find.text('Target maturity date'), findsOneWidget);
+    expect(find.text('Maturity date'), findsOneWidget);
   });
 
   testWidgets('insufficient Boc Flex funds opens an error dialog', (
@@ -735,6 +822,11 @@ void main() {
     );
 
     await tester.tap(find.text('3 months'));
+    await tester.pump();
+    await tester.pump();
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), '1,000');
     await tester.pump();
     await tester.tap(find.text('Continue'));
     await tester.pump();

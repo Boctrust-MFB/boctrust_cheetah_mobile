@@ -10,6 +10,12 @@ import '../model/savings_plan_models.dart';
 
 const _plansUnavailable = 'Savings plans are not available right now.';
 
+/// A calendar date as Core's `YYYY-MM-DD`.
+String _isoDate(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-'
+    '${date.month.toString().padLeft(2, '0')}-'
+    '${date.day.toString().padLeft(2, '0')}';
+
 final coreSavingsPlanServiceProvider = Provider<CoreSavingsPlanService>(
   (ref) => CoreSavingsPlanService(ref.watch(coreApiServiceProvider)),
 );
@@ -72,8 +78,44 @@ class CoreSavingsPlanService {
     );
   }
 
-  /// Creates a plan that Core funds from Boc Flex with the product's minimum
-  /// for the term, and returns its `planId`. Never retried.
+  /// The SmartSave and Fixed Deposit products a plan can be opened on.
+  Future<NotifierState<List<SavingsPlanProduct>>> getSavingsProducts() async {
+    final api = _api;
+    if (api == null) return const NotifierState.blocked(_plansUnavailable);
+    return NotifierState.fromResponse(
+      await api.getData<List<SavingsPlanProduct>>(
+        CoreApiEndpoints.savingsProducts,
+        parser: SavingsPlanProduct.listFromJson,
+      ),
+    );
+  }
+
+  /// What Core would apply to a plan of [productCode] lasting [tenorDays] or
+  /// maturing on [endDate]; exactly one must be given. 400 when the duration
+  /// is out of range, 404 when the product is unknown or inactive.
+  Future<NotifierState<SavingsPlanQuote>> quoteSavingsProduct(
+    String productCode, {
+    int? tenorDays,
+    DateTime? endDate,
+  }) async {
+    final api = _api;
+    if (api == null) return const NotifierState.blocked(_plansUnavailable);
+    if ((tenorDays == null) == (endDate == null)) {
+      return const NotifierState.error('Choose how long you will save.');
+    }
+    return NotifierState.fromResponse(
+      await api.getData<SavingsPlanQuote>(
+        CoreApiEndpoints.savingsProductQuote(productCode),
+        queryParameters: endDate == null
+            ? {'tenorDays': tenorDays}
+            : {'endDate': _isoDate(endDate)},
+        parser: SavingsPlanQuote.fromJson,
+      ),
+    );
+  }
+
+  /// Creates a plan that Core funds from Boc Flex with the request's
+  /// `amount`, and returns its `planId`. Never retried.
   Future<NotifierState<String>> createPlan(
     CreateSavingsPlanRequest request,
   ) async {

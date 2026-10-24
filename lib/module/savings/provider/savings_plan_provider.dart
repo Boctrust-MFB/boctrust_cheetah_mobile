@@ -17,6 +17,34 @@ final savingsPlansProvider = FutureProvider.autoDispose
       return ref.read(coreSavingsPlanServiceProvider).getPlans(product);
     });
 
+/// The products a SmartSave or Fixed Deposit plan can be opened on.
+final savingsPlanProductsProvider =
+    FutureProvider.autoDispose<NotifierState<List<SavingsPlanProduct>>>((ref) {
+      ref.watch(authSessionProvider);
+      return ref.read(coreSavingsPlanServiceProvider).getSavingsProducts();
+    });
+
+/// A product and one chosen duration: [tenorDays] for a preset or [endDate]
+/// for a custom maturity date, never both.
+typedef SavingsQuoteKey = ({
+  String productCode,
+  int? tenorDays,
+  DateTime? endDate,
+});
+
+/// Core's quote for one product and duration.
+final savingsPlanQuoteProvider = FutureProvider.autoDispose
+    .family<NotifierState<SavingsPlanQuote>, SavingsQuoteKey>((ref, key) {
+      ref.watch(authSessionProvider);
+      return ref
+          .read(coreSavingsPlanServiceProvider)
+          .quoteSavingsProduct(
+            key.productCode,
+            tenorDays: key.tenorDays,
+            endDate: key.endDate,
+          );
+    });
+
 /// One plan with its history, keyed by its server `planId`.
 final savingsPlanDetailProvider = FutureProvider.autoDispose
     .family<NotifierState<SavingsPlanDetail>, String>((ref, planId) {

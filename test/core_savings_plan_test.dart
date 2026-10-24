@@ -125,36 +125,57 @@ class _Accounts extends CustomerBankAccountsNotifier {
   }
 }
 
+SavingsPlanProduct _product(int minTenorDays) => SavingsPlanProduct(
+  productCode: 'p',
+  productName: 'Plan',
+  planType: 'fixed_deposit',
+  earlyWithdrawalFeePercent: '10',
+  minTenorDays: minTenorDays,
+  maxTenorDays: 365,
+  tenors: const [],
+);
+
+SavingsPlanQuote _quote(
+  SavingsProductType type,
+  int tenorDays, {
+  String minAmount = '5000.00',
+  String? maxAmount,
+}) => SavingsPlanQuote(
+  productCode: type.coreCode!,
+  productName: type.displayName,
+  tenorDays: tenorDays,
+  startDate: DateTime(2026, 10, 15),
+  endDate: DateTime(2026, 10, 15 + tenorDays),
+  interestRatePercent: '10',
+  minAmount: minAmount,
+  maxAmount: maxAmount,
+  earlyWithdrawalFeePercent: '10',
+);
+
 void main() {
   test('custom dates enforce each product minimum in calendar days', () {
     final today = DateTime(2026, 10, 15);
-    SavingsPlanDraft goal(int days) => SavingsPlanDraft(
+    final goalProduct = _product(90);
+    final depositProduct = _product(30);
+    int? goal(int days, [DateTime? on]) => SavingsPlanDraft(
       type: SavingsProductType.smartSave,
-      name: 'Rent',
-      amount: '200000',
       customMaturityDate: DateTime(2026, 10, 15 + days),
-    );
-    SavingsPlanDraft deposit(int days) => SavingsPlanDraft(
+    ).tenorDaysOn(on ?? today, goalProduct);
+    int? deposit(int days) => SavingsPlanDraft(
       type: SavingsProductType.fixed,
       customMaturityDate: DateTime(2026, 10, 15 + days),
-    );
+    ).tenorDaysOn(today, depositProduct);
 
-    expect(goal(89).toCreateRequest(today: today), isNull);
-    expect(goal(90).toCreateRequest(today: today)?.tenorDays, 90);
-    expect(
-      goal(90).toCreateRequest(today: today.add(const Duration(days: 1))),
-      isNull,
-    );
-    expect(deposit(29).toCreateRequest(today: today), isNull);
-    expect(deposit(30).toCreateRequest(today: today)?.tenorDays, 30);
-    expect(goal(365).toCreateRequest(today: today)?.tenorDays, 365);
-    expect(deposit(365).toCreateRequest(today: today)?.tenorDays, 365);
-    expect(goal(366).toCreateRequest(today: today), isNull);
-    expect(deposit(366).toCreateRequest(today: today), isNull);
-    expect(
-      deposit(45).toCreateRequest(today: today)?.toJson()['tenorDays'],
-      45,
-    );
+    expect(goal(89), isNull);
+    expect(goal(90), 90);
+    expect(goal(90, today.add(const Duration(days: 1))), isNull);
+    expect(deposit(29), isNull);
+    expect(deposit(30), 30);
+    expect(goal(365), 365);
+    expect(deposit(365), 365);
+    expect(goal(366), isNull);
+    expect(deposit(366), isNull);
+    expect(deposit(45), 45);
   });
 
   test('choosing a preset after a custom date restores its fixed tenor', () {
@@ -164,28 +185,26 @@ void main() {
     ).copyWith(durationMonths: 3, clearCustomMaturityDate: true);
 
     expect(selected.customMaturityDate, isNull);
-    expect(
-      selected.toCreateRequest(today: DateTime(2026, 10, 15))?.tenorDays,
-      90,
-    );
+    expect(selected.tenorDaysOn(DateTime(2026, 10, 15), _product(30)), 90);
   });
 
   test('SmartSave target must exceed its opening minimum', () {
+    final quote = _quote(SavingsProductType.smartSave, 180);
     for (final amount in ['abc', '0', '4,999.99', '5,000', '5,000.00']) {
-      expect(smartSaveTargetValid(amount), isFalse, reason: amount);
+      expect(quote.acceptsTarget(amount), isFalse, reason: amount);
       expect(
         SavingsPlanDraft(
           type: SavingsProductType.smartSave,
           name: 'Rent',
           amount: amount,
           durationMonths: 6,
-        ).toCreateRequest(),
+        ).toCreateRequest(quote),
         isNull,
         reason: amount,
       );
     }
-    expect(smartSaveTargetValid('₦5,000.01'), isTrue);
-    expect(smartSaveTargetValid('6,000'), isTrue);
+    expect(quote.acceptsTarget('₦5,000.01'), isTrue);
+    expect(quote.acceptsTarget('6,000'), isTrue);
   });
 
   // Plan amounts arrive as Naira decimal strings.
@@ -329,25 +348,39 @@ void main() {
       recurringAmount: '5,000',
     );
 
-    expect(draft.toCreateRequest()!.toJson(), {
-      'productCode': 'bocSmartSave',
-      'tenorDays': 180,
-      'planName': 'Rent',
-      'targetAmount': '200000.00',
-      'saveFrequency': 'weekly',
-      'recurringAmount': '5000.00',
-    });
+    expect(
+      draft
+          .toCreateRequest(_quote(SavingsProductType.smartSave, 180))!
+          .toJson(),
+      {
+        'productCode': 'bocSmartSave',
+        'tenorDays': 180,
+        'amount': '5000.00',
+        'planName': 'Rent',
+        'targetAmount': '200000.00',
+        'saveFrequency': 'weekly',
+        'recurringAmount': '5000.00',
+      },
+    );
   });
 
-  test('a Fixed Deposit draft sends only its term and name', () {
+  test('a Fixed Deposit draft sends its term and typed principal', () {
     const draft = SavingsPlanDraft(
       type: SavingsProductType.fixed,
+      amount: '25,000',
       durationMonths: 3,
     );
+    final quote = _quote(
+      SavingsProductType.fixed,
+      90,
+      minAmount: '1000.00',
+      maxAmount: '50000.00',
+    );
 
-    expect(draft.toCreateRequest()!.toJson(), {
+    expect(draft.toCreateRequest(quote)!.toJson(), {
       'productCode': 'boctrustFixedDeposit',
       'tenorDays': 90,
+      'amount': '25000.00',
     });
   });
 
@@ -355,23 +388,27 @@ void main() {
     const draft = SavingsPlanDraft(
       type: SavingsProductType.fixed,
       name: 'School fees',
+      amount: '5,000',
       durationMonths: 12,
       autoSave: true,
       frequency: SavingsFrequency.weekly,
       recurringAmount: '1,500',
     );
 
-    expect(draft.toCreateRequest()!.toJson(), {
+    final quote = _quote(SavingsProductType.fixed, 365);
+    expect(draft.toCreateRequest(quote)!.toJson(), {
       'productCode': 'boctrustFixedDeposit',
       'tenorDays': 365,
+      'amount': '5000.00',
       'planName': 'School fees',
       'saveFrequency': 'weekly',
       'recurringAmount': '1500.00',
     });
-    expect(draft.copyWith(recurringAmount: '').toCreateRequest(), isNull);
-    expect(draft.copyWith(autoSave: false).toCreateRequest()!.toJson(), {
+    expect(draft.copyWith(recurringAmount: '').toCreateRequest(quote), isNull);
+    expect(draft.copyWith(autoSave: false).toCreateRequest(quote)!.toJson(), {
       'productCode': 'boctrustFixedDeposit',
       'tenorDays': 365,
+      'amount': '5000.00',
       'planName': 'School fees',
     });
   });
@@ -388,11 +425,22 @@ void main() {
     const deposit = SavingsPlanDraft(
       type: SavingsProductType.fixed,
       name: depositName,
+      amount: '5,000',
       durationMonths: 3,
     );
 
-    expect(goal.toCreateRequest()!.toJson()['planName'], goalName);
-    expect(deposit.toCreateRequest()!.toJson()['planName'], depositName);
+    expect(
+      goal
+          .toCreateRequest(_quote(SavingsProductType.smartSave, 180))!
+          .toJson()['planName'],
+      goalName,
+    );
+    expect(
+      deposit
+          .toCreateRequest(_quote(SavingsProductType.fixed, 90))!
+          .toJson()['planName'],
+      depositName,
+    );
     expect(
       SavingsPlan.tryParse({..._plan(), 'planName': goalName})!.name,
       goalName,
