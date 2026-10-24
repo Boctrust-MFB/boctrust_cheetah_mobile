@@ -418,6 +418,15 @@ extension SavingsPlanScreens on FlowPageState {
         .firstOrNull;
     final accountNumber = detail.accountNumber ?? productGroup?.accountNumber;
     final frozenAccount = _frozenAccountNumber(accountNumber);
+    // Core only deletes a plan with no money in it, so the action is offered
+    // only once the principal reads as exactly zero.
+    final canDelete =
+        balanceToKobo(plan.principal) == '0' &&
+        ref
+            .read(
+              featureAvailabilityProvider(FeatureCapability.savingsPlanDelete),
+            )
+            .isAvailable;
     return AppScaffold(
       title: plan.name,
       activeSection: AppSection.save,
@@ -428,6 +437,7 @@ extension SavingsPlanScreens on FlowPageState {
           tooltip: 'More options',
           onSelected: (action) => switch (action) {
             'edit' => _gatedPlanAction(FeatureCapability.savingsPlanEdit),
+            'delete' => _deletePlan(plan),
             'interest' => go(
               AppRoutes.interestHistory,
               arguments: AppRouteArguments(entityId: plan.id),
@@ -452,6 +462,8 @@ extension SavingsPlanScreens on FlowPageState {
               ),
             const PopupMenuItem(value: 'edit', child: Text('Edit plan')),
             const PopupMenuItem(value: 'withdraw', child: Text('Withdraw')),
+            if (canDelete)
+              const PopupMenuItem(value: 'delete', child: Text('Delete plan')),
           ],
         ),
       ],
@@ -602,6 +614,44 @@ extension SavingsPlanScreens on FlowPageState {
   Future<void> _gatedPlanAction(FeatureCapability capability) async {
     if (!ref.read(featureAvailabilityProvider(capability)).isAvailable) {
       await BocUnavailableSheet.show(context);
+    }
+  }
+
+  /// Soft-deletes an empty plan after an explicit confirmation. The result
+  /// comes from Core's reply and a refreshed list, never from a resend.
+  Future<void> _deletePlan(SavingsPlan plan) async {
+    final confirmed = await AppConfirmSheet.show(
+      context,
+      title: 'Delete plan?',
+      message:
+          'A plan can only be deleted when it has no money in it and no '
+          'interest is still being paid. Once deleted it no longer shows in '
+          'your savings.',
+      confirmLabel: 'Delete plan',
+      cancelLabel: 'Keep plan',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final actions = ref.read(savingsPlanActionProvider.notifier);
+    await actions.deletePlan(plan.id);
+    if (!mounted) return;
+    final state = ref
+        .read(savingsPlanActionProvider)
+        .viewFor(SavingsPlanAction.delete, plan.id);
+    switch (state.phase) {
+      case SavingsPlanActionPhase.done:
+        messenger.showSnackBar(const SnackBar(content: Text('Plan deleted.')));
+        back();
+      case SavingsPlanActionPhase.idle:
+        // Another savings action was still sending, so nothing was sent.
+        messenger.showSnackBar(
+          const SnackBar(content: Text(savingsPlanBusyMessage)),
+        );
+      default:
+        messenger.showSnackBar(
+          SnackBar(content: Text(state.message ?? 'Request failed.')),
+        );
     }
   }
 
