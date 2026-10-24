@@ -43,6 +43,7 @@ enum FeatureCapability {
   savingsPlanDeposit,
   savingsPlanEdit,
   savingsPlanWithdraw,
+  savingsPlanDelete,
   deviceSessions,
   accountDeletion,
   accountStatement,
@@ -478,11 +479,33 @@ const capabilityRequirements = <FeatureCapability, CapabilityRequirement>{
       ),
     },
   ),
+  // Deleting an empty plan; an open one is cancelled. No money moves, but the
+  // contract is unverified, so staging only.
+  FeatureCapability.savingsPlanDelete: CapabilityRequirement(
+    stagingOnly: true,
+    operations: {
+      (
+        backend: ApiBackend.core,
+        method: 'DELETE',
+        path: CoreApiEndpoints.savingsPlanDeleteTemplate,
+      ),
+    },
+  ),
   // Creating a SmartSave or Fixed Deposit plan. Core funds it from Boc Flex,
   // so staging only.
   FeatureCapability.smartSaveCreate: CapabilityRequirement(
     stagingOnly: true,
     operations: {
+      (
+        backend: ApiBackend.core,
+        method: 'GET',
+        path: CoreApiEndpoints.savingsProducts,
+      ),
+      (
+        backend: ApiBackend.core,
+        method: 'GET',
+        path: CoreApiEndpoints.savingsProductQuoteTemplate,
+      ),
       (
         backend: ApiBackend.core,
         method: 'POST',
@@ -493,6 +516,16 @@ const capabilityRequirements = <FeatureCapability, CapabilityRequirement>{
   FeatureCapability.fixedDepositCreate: CapabilityRequirement(
     stagingOnly: true,
     operations: {
+      (
+        backend: ApiBackend.core,
+        method: 'GET',
+        path: CoreApiEndpoints.savingsProducts,
+      ),
+      (
+        backend: ApiBackend.core,
+        method: 'GET',
+        path: CoreApiEndpoints.savingsProductQuoteTemplate,
+      ),
       (
         backend: ApiBackend.core,
         method: 'POST',

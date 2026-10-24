@@ -176,6 +176,22 @@ abstract final class CoreApiEndpoints {
       '${savingsPlan(planId)}/liquidate';
   static const savingsPlanLiquidateTemplate = '$savingsPlanTemplate/liquidate';
 
+  /// Deletes one plan that holds no money; [planId] is one path segment.
+  /// An open plan is cancelled. No request body.
+  static String savingsPlanDelete(String planId) => savingsPlan(planId);
+  static const savingsPlanDeleteTemplate = savingsPlanTemplate;
+
+  /// The SmartSave and Fixed Deposit products a plan can be opened on, with
+  /// their duration bounds and rate bands.
+  static const savingsProducts = '/me/savings-products';
+
+  /// GET with exactly one of `tenorDays` or `endDate`: the rate, first-deposit
+  /// limits and maturity creation would apply. [productCode] is one segment.
+  static String savingsProductQuote(String productCode) =>
+      '$savingsProducts/${Uri.encodeComponent(productCode)}/quote';
+  static const savingsProductQuoteTemplate =
+      '$savingsProducts/{productCode}/quote';
+
   /// The caller's BocFlex interest summary and its accrual history.
   static const flexInterest = '/me/bocflex/interest';
   static const flexInterestAccruals = '/me/bocflex/interest/accruals';
