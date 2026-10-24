@@ -14,7 +14,7 @@ import 'savings_plan_provider.dart';
 enum SavingsPlanActionPhase { idle, sending, done, failed, unknown }
 
 /// Which flow started an action; one flow never shows another's state.
-enum SavingsPlanAction { fund, liquidate, create }
+enum SavingsPlanAction { fund, liquidate, create, delete }
 
 /// Shown when a flow starts while another flow's action is still sending.
 const savingsPlanBusyMessage =
@@ -27,6 +27,7 @@ class SavingsPlanActionState extends Equatable {
     this.requestedPlanId,
     this.planId,
     this.result,
+    this.deleteResult,
     this.message,
   });
 
@@ -41,6 +42,9 @@ class SavingsPlanActionState extends Equatable {
   /// The plan the action touched, set once Core confirms it.
   final String? planId;
   final SavingsPlanActionResult? result;
+
+  /// What Core reported for a delete; [result] stays for fund and liquidate.
+  final SavingsPlanDeleteResult? deleteResult;
   final String? message;
 
   /// Whether the flow for [kind] on [planId] started this state.
@@ -63,6 +67,7 @@ class SavingsPlanActionState extends Equatable {
     requestedPlanId,
     planId,
     result,
+    deleteResult,
     message,
   ];
 }
@@ -128,8 +133,20 @@ class SavingsPlanActionNotifier extends Notifier<SavingsPlanActionState> {
     SavingsPlanAction.create,
     null,
     () => ref.read(coreSavingsPlanServiceProvider).createPlan(request),
-    (planId) => (planId, null),
+    (planId) => (planId, null, null),
     gate: _flexGate,
+  );
+
+  /// Soft-deletes [planId], which Core allows only once it holds no money.
+  /// Core's 409 decides eligibility, so there is no Flex debit gate, and the
+  /// plan is never withdrawn first. Never resent after an unknown outcome.
+  Future<void> deletePlan(String planId) => _run(
+    SavingsPlanAction.delete,
+    planId,
+    () => ref.read(coreSavingsPlanServiceProvider).deletePlan(planId),
+    (result) => (result.planId, null, result),
+    notFound: 'This plan is no longer available.',
+    refreshFlex: false,
   );
 
   _DebitGate get _flexGate => (
@@ -138,16 +155,20 @@ class SavingsPlanActionNotifier extends Notifier<SavingsPlanActionState> {
     unconfirmed: kFlexUnconfirmedMessage,
   );
 
-  static (String?, SavingsPlanActionResult?) _withResult(
-    SavingsPlanActionResult result,
-  ) => (result.planId, result);
+  static (String?, SavingsPlanActionResult?, SavingsPlanDeleteResult?)
+  _withResult(SavingsPlanActionResult result) => (result.planId, result, null);
 
   Future<void> _run<T>(
     SavingsPlanAction action,
     String? planId,
     Future<NotifierState<T>> Function() call,
-    (String?, SavingsPlanActionResult?) Function(T data) done, {
+    (String?, SavingsPlanActionResult?, SavingsPlanDeleteResult?) Function(
+      T data,
+    )
+    done, {
     String? forbidden,
+    String? notFound,
+    bool refreshFlex = true,
     _DebitGate? gate,
   }) async {
     if (state.phase == SavingsPlanActionPhase.sending) return;
@@ -155,7 +176,16 @@ class SavingsPlanActionNotifier extends Notifier<SavingsPlanActionState> {
     // refreshes the plan and the balance.
     final link = ref.keepAlive();
     try {
-      await _send(action, planId, call, done, forbidden, gate);
+      await _send(
+        action,
+        planId,
+        call,
+        done,
+        forbidden,
+        notFound,
+        refreshFlex,
+        gate,
+      );
     } finally {
       link.close();
     }
@@ -165,8 +195,13 @@ class SavingsPlanActionNotifier extends Notifier<SavingsPlanActionState> {
     SavingsPlanAction action,
     String? planId,
     Future<NotifierState<T>> Function() call,
-    (String?, SavingsPlanActionResult?) Function(T data) done,
+    (String?, SavingsPlanActionResult?, SavingsPlanDeleteResult?) Function(
+      T data,
+    )
+    done,
     String? forbidden,
+    String? notFound,
+    bool refreshFlex,
     _DebitGate? gate,
   ) async {
     state = SavingsPlanActionState(
@@ -196,15 +231,16 @@ class SavingsPlanActionNotifier extends Notifier<SavingsPlanActionState> {
 
     final data = reply.data;
     if (reply.isDone && data != null) {
-      final (donePlanId, result) = done(data);
+      final (donePlanId, result, deleteResult) = done(data);
       state = SavingsPlanActionState(
         phase: SavingsPlanActionPhase.done,
         action: action,
         requestedPlanId: planId,
         planId: donePlanId,
         result: result,
+        deleteResult: deleteResult,
       );
-      _refresh(state.planId);
+      _refresh(state.planId, refreshFlex);
       return;
     }
 
@@ -221,7 +257,17 @@ class SavingsPlanActionNotifier extends Notifier<SavingsPlanActionState> {
         requestedPlanId: planId,
         message: _unconfirmed,
       );
-      _refresh(planId);
+      _refresh(planId, refreshFlex);
+      return;
+    }
+    if (code == 404 && notFound != null) {
+      state = SavingsPlanActionState(
+        phase: SavingsPlanActionPhase.failed,
+        action: action,
+        requestedPlanId: planId,
+        message: notFound,
+      );
+      _refresh(planId, refreshFlex);
       return;
     }
     state = SavingsPlanActionState(
@@ -234,11 +280,12 @@ class SavingsPlanActionNotifier extends Notifier<SavingsPlanActionState> {
     );
   }
 
-  /// Reloads the plan lists, [planId]'s detail when there is one, and the
-  /// Boc Flex balance.
-  void _refresh(String? planId) {
+  /// Reloads the plan lists, [planId]'s detail when there is one, and, when
+  /// [flex], the Boc Flex balance and history.
+  void _refresh(String? planId, bool flex) {
     ref.invalidate(savingsPlansProvider);
     if (planId != null) ref.invalidate(savingsPlanDetailProvider(planId));
+    if (!flex) return;
     ref.read(refreshFlexTransactionHistoryProvider)().ignore();
     ref.read(customerBankAccountsProvider.notifier).load().ignore();
   }

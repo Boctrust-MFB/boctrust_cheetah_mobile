@@ -599,4 +599,47 @@ void main() {
       SavingsPlanActionPhase.idle,
     );
   });
+
+  test('delete sends one DELETE and never liquidates', () async {
+    final core = _Core({
+      'planId': 'p/1',
+      'status': 'cancelled',
+      'deletedAt': '2026-10-24T10:00:00Z',
+    });
+    final container = ProviderContainer(
+      overrides: [
+        coreSavingsPlanServiceProvider.overrideWithValue(_service(core)),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.listen(savingsPlanActionProvider, (_, _) {});
+    final actions = container.read(savingsPlanActionProvider.notifier);
+
+    await actions.deletePlan('p/1');
+
+    var state = container.read(savingsPlanActionProvider);
+    expect(state.phase, SavingsPlanActionPhase.done);
+    expect(state.deleteResult?.status, SavingsPlanStatus.cancelled);
+    final request = core.requests.single;
+    expect(request.method, 'DELETE');
+    expect(request.path, '/me/savings-plans/p%2F1');
+    expect(request.data, isNull);
+    expect(core.requests.any((r) => r.path.contains('liquidate')), isFalse);
+
+    // A reply that cannot be read is an unknown outcome and is not resent.
+    final unreadable = _Core({'status': 'cancelled'});
+    final other = ProviderContainer(
+      overrides: [
+        coreSavingsPlanServiceProvider.overrideWithValue(_service(unreadable)),
+      ],
+    );
+    addTearDown(other.dispose);
+    other.listen(savingsPlanActionProvider, (_, _) {});
+    await other.read(savingsPlanActionProvider.notifier).deletePlan('p1');
+
+    state = other.read(savingsPlanActionProvider);
+    expect(state.phase, SavingsPlanActionPhase.unknown);
+    expect(unreadable.requests, hasLength(1));
+    expect(unreadable.requests.single.method, 'DELETE');
+  });
 }
