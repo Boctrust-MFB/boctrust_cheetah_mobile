@@ -692,6 +692,9 @@ class _StatementRequestFormState extends ConsumerState<_StatementRequestForm> {
   String? _selectedAccount;
   DateTimeRange? _range;
 
+  /// True from the tap until the save dialog closes.
+  bool _busy = false;
+
   List<CustomerBankAccount> _eligible(CustomerBankAccountsData? data) => [
     for (final account in data?.accounts ?? const <CustomerBankAccount>[])
       if (_accountNumber.hasMatch(account.accountNumber) &&
@@ -711,8 +714,22 @@ class _StatementRequestFormState extends ConsumerState<_StatementRequestForm> {
   }
 
   Future<void> _request(String accountNumber, DateTimeRange range) async {
-    final notifier = ref.read(coreAccountStatementProvider.notifier);
-    await notifier.request(accountNumber, range.start, range.end);
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await _requestAndSave(accountNumber, range);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _requestAndSave(
+    String accountNumber,
+    DateTimeRange range,
+  ) async {
+    await ref
+        .read(coreAccountStatementProvider.notifier)
+        .request(accountNumber, range.start, range.end);
     if (!mounted) return;
     final result = ref.read(coreAccountStatementProvider);
     final statement = result.data;
@@ -747,11 +764,14 @@ class _StatementRequestFormState extends ConsumerState<_StatementRequestForm> {
     final available = ref
         .watch(featureAvailabilityProvider(FeatureCapability.accountStatement))
         .isAvailable;
-    final requesting = ref.watch(coreAccountStatementProvider).isLoading;
+    final requesting = _busy;
+    // Keeps the autoDispose notifier alive while a request is running.
+    ref.watch(coreAccountStatementProvider);
     final accounts = _eligible(accountsState.data);
     final account = _current(accounts);
     final range = _range;
-    final canRequest = available && account != null && range != null;
+    final canRequest =
+        !requesting && available && account != null && range != null;
 
     final Widget accountField;
     if (accounts.length > 1) {
