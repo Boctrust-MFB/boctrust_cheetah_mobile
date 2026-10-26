@@ -88,6 +88,11 @@ typedef _DebitGate = ({
   String unconfirmed,
 });
 
+/// What a confirmed reply sets on the done state: the plan it touched and
+/// whichever result the action reports. Phase and flow are filled in by
+/// the notifier.
+typedef _Done<T> = SavingsPlanActionState Function(T data);
+
 const _unconfirmed =
     "We couldn't confirm this. Check your plan before trying again.";
 
@@ -133,7 +138,7 @@ class SavingsPlanActionNotifier extends Notifier<SavingsPlanActionState> {
     SavingsPlanAction.create,
     null,
     () => ref.read(coreSavingsPlanServiceProvider).createPlan(request),
-    (planId) => (planId, null, null),
+    (planId) => SavingsPlanActionState(planId: planId),
     gate: _flexGate,
   );
 
@@ -144,7 +149,8 @@ class SavingsPlanActionNotifier extends Notifier<SavingsPlanActionState> {
     SavingsPlanAction.delete,
     planId,
     () => ref.read(coreSavingsPlanServiceProvider).deletePlan(planId),
-    (result) => (result.planId, null, result),
+    (result) =>
+        SavingsPlanActionState(planId: result.planId, deleteResult: result),
     notFound: 'This plan is no longer available.',
     refreshFlex: false,
   );
@@ -155,17 +161,14 @@ class SavingsPlanActionNotifier extends Notifier<SavingsPlanActionState> {
     unconfirmed: kFlexUnconfirmedMessage,
   );
 
-  static (String?, SavingsPlanActionResult?, SavingsPlanDeleteResult?)
-  _withResult(SavingsPlanActionResult result) => (result.planId, result, null);
+  static SavingsPlanActionState _withResult(SavingsPlanActionResult result) =>
+      SavingsPlanActionState(planId: result.planId, result: result);
 
   Future<void> _run<T>(
     SavingsPlanAction action,
     String? planId,
     Future<NotifierState<T>> Function() call,
-    (String?, SavingsPlanActionResult?, SavingsPlanDeleteResult?) Function(
-      T data,
-    )
-    done, {
+    _Done<T> done, {
     String? forbidden,
     String? notFound,
     bool refreshFlex = true,
@@ -195,10 +198,7 @@ class SavingsPlanActionNotifier extends Notifier<SavingsPlanActionState> {
     SavingsPlanAction action,
     String? planId,
     Future<NotifierState<T>> Function() call,
-    (String?, SavingsPlanActionResult?, SavingsPlanDeleteResult?) Function(
-      T data,
-    )
-    done,
+    _Done<T> done,
     String? forbidden,
     String? notFound,
     bool refreshFlex,
@@ -231,16 +231,20 @@ class SavingsPlanActionNotifier extends Notifier<SavingsPlanActionState> {
 
     final data = reply.data;
     if (reply.isDone && data != null) {
-      final (donePlanId, result, deleteResult) = done(data);
+      final confirmed = done(data);
       state = SavingsPlanActionState(
         phase: SavingsPlanActionPhase.done,
         action: action,
         requestedPlanId: planId,
-        planId: donePlanId,
-        result: result,
-        deleteResult: deleteResult,
+        planId: confirmed.planId,
+        result: confirmed.result,
+        deleteResult: confirmed.deleteResult,
       );
-      _refresh(state.planId, refreshFlex);
+      // A deleted plan has no detail left to read.
+      _refresh(
+        action == SavingsPlanAction.delete ? null : state.planId,
+        refreshFlex,
+      );
       return;
     }
 

@@ -642,7 +642,7 @@ extension SavingsPlanScreens on FlowPageState {
     switch (state.phase) {
       case SavingsPlanActionPhase.done:
         messenger.showSnackBar(const SnackBar(content: Text('Plan deleted.')));
-        back();
+        go(AppRoutes.home);
       case SavingsPlanActionPhase.idle:
         // Another savings action was still sending, so nothing was sent.
         messenger.showSnackBar(
