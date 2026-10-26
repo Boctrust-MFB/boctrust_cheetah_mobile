@@ -725,11 +725,10 @@ class _StatementRequestFormState extends ConsumerState<_StatementRequestForm> {
     String accountNumber,
     DateTimeRange range,
   ) async {
-    await ref
+    final result = await ref
         .read(coreAccountStatementProvider.notifier)
         .request(accountNumber, range.start, range.end);
     if (!mounted) return;
-    final result = ref.read(coreAccountStatementProvider);
     final statement = result.data;
     if (!result.isDone || statement == null) {
       ResponseHandler.showError(
@@ -743,10 +742,21 @@ class _StatementRequestFormState extends ConsumerState<_StatementRequestForm> {
         bytes: statement.bytes,
       );
       // A null result is the customer closing the save dialog.
-      if (saved != null) ResponseHandler.showSuccess('Statement saved.');
+      if (saved == null) return;
+      ResponseHandler.showSuccess('Statement saved.');
+      _notifySaved(statement.fileName);
     } on Object {
       ResponseHandler.showError('We could not save your statement.');
     }
+  }
+
+  /// Also reports the save as a local notification when the app has a
+  /// notification service; the snackbar alone covers the rest.
+  void _notifySaved(String fileName) {
+    ref
+        .read(localNotificationServiceProvider)
+        ?.showAppNotification(title: 'Statement saved', body: fileName)
+        .ignore();
   }
 
   @override
@@ -774,7 +784,9 @@ class _StatementRequestFormState extends ConsumerState<_StatementRequestForm> {
     final Widget accountField;
     if (accounts.length > 1) {
       accountField = DropdownButtonFormField<String>(
-        key: const Key('statement-account'),
+        // initialValue is read once; a new key rebuilds the field whenever
+        // the account the request uses changes.
+        key: ValueKey(account?.accountNumber),
         initialValue: account?.accountNumber,
         decoration: const InputDecoration(labelText: 'Account'),
         items: [

@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/core_api_endpoints.dart';
@@ -124,16 +127,39 @@ class CoreAccountService {
       today: DateTime.now(),
     );
     if (rangeError != null) return NotifierState.error(rangeError);
-    return NotifierState.fromResponse(
-      await api.getData<CoreAccountStatement>(
+    final reply = NotifierState.fromResponse(
+      await api.getData<CoreAccountStatementReply>(
         CoreApiEndpoints.bankAccountStatement(accountNumber),
         queryParameters: {
           'fromDate': formatCoreDateOnly(fromDate),
           'toDate': formatCoreDateOnly(toDate),
         },
-        parser: CoreAccountStatement.fromJson,
+        parser: CoreAccountStatementReply.fromJson,
       ),
     );
+    final parsed = reply.data;
+    if (!reply.isDone || parsed == null) {
+      return NotifierState<CoreAccountStatement>(
+        status: reply.status,
+        message: reply.message,
+        statusCode: reply.statusCode,
+        errorCode: reply.errorCode,
+        errors: reply.errors,
+        meta: reply.meta,
+        noAuth: reply.noAuth,
+      );
+    }
+    // A statement can be megabytes of base64; decode it off the UI isolate.
+    // Invalid base64 or an empty PDF is an invalid reply, never a crash.
+    try {
+      final bytes = await compute(base64Decode, parsed.content);
+      return NotifierState.done(
+        parsed.withBytes(bytes),
+        statusCode: reply.statusCode,
+      );
+    } on FormatException {
+      return const NotifierState.error('The server response was invalid.');
+    }
   }
 
   Future<NotifierState<List<CoreBankProduct>>> getBankProducts() async {

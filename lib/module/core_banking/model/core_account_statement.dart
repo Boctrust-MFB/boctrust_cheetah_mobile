@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'core_json.dart';
@@ -24,18 +23,18 @@ String? coreStatementRangeError(
   return null;
 }
 
-/// A PDF statement from Core, with its content already decoded.
-class CoreAccountStatement {
-  const CoreAccountStatement({
+/// Core's statement reply, checked but with its PDF still base64 text, so
+/// the parse stays cheap on the UI isolate.
+class CoreAccountStatementReply {
+  const CoreAccountStatementReply({
     required this.accountNumber,
     required this.fromDate,
     required this.toDate,
     required this.fileName,
-    required this.contentType,
-    required this.bytes,
+    required this.content,
   });
 
-  factory CoreAccountStatement.fromJson(Object? json) {
+  factory CoreAccountStatementReply.fromJson(Object? json) {
     if (json is! Map) throw const FormatException('Invalid statement.');
     final accountNumber = coreText(json['accountNumber']);
     final fromDate = coreText(json['fromDate']);
@@ -54,7 +53,26 @@ class CoreAccountStatement {
     if (contentType.toLowerCase() != _pdfContentType) {
       throw const FormatException('Statement is not a PDF.');
     }
-    final bytes = base64Decode(content);
+    return CoreAccountStatementReply(
+      accountNumber: accountNumber,
+      fromDate: fromDate,
+      toDate: toDate,
+      fileName: fileName,
+      content: content,
+    );
+  }
+
+  final String accountNumber;
+  final String fromDate;
+  final String toDate;
+  final String fileName;
+
+  /// The PDF, base64-encoded.
+  final String content;
+
+  /// The statement with [bytes], the PDF that [content] decodes to. Throws
+  /// [FormatException] when the bytes are empty.
+  CoreAccountStatement withBytes(Uint8List bytes) {
     if (bytes.isEmpty) throw const FormatException('Statement is empty.');
     return CoreAccountStatement(
       accountNumber: accountNumber,
@@ -65,6 +83,18 @@ class CoreAccountStatement {
       bytes: bytes,
     );
   }
+}
+
+/// A PDF statement from Core, with its content decoded.
+class CoreAccountStatement {
+  const CoreAccountStatement({
+    required this.accountNumber,
+    required this.fromDate,
+    required this.toDate,
+    required this.fileName,
+    required this.contentType,
+    required this.bytes,
+  });
 
   final String accountNumber;
   final String fromDate;
