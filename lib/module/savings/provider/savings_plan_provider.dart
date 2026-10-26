@@ -25,11 +25,13 @@ final savingsPlanProductsProvider =
     });
 
 /// A product and one chosen duration: [tenorDays] for a preset or [endDate]
-/// for a custom maturity date, never both.
+/// for a custom maturity date, never both. [today] is the device's date, so
+/// a quote read on an earlier day is read again.
 typedef SavingsQuoteKey = ({
   String productCode,
   int? tenorDays,
   DateTime? endDate,
+  DateTime today,
 });
 
 /// Core's quote for one product and duration.

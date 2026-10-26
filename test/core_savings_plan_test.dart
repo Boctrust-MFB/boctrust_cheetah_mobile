@@ -384,7 +384,7 @@ void main() {
     });
   });
 
-  test('a Fixed Deposit draft sends its recurring schedule when enabled', () {
+  test('a Fixed Deposit draft never sends a recurring schedule', () {
     const draft = SavingsPlanDraft(
       type: SavingsProductType.fixed,
       name: 'School fees',
@@ -397,15 +397,6 @@ void main() {
 
     final quote = _quote(SavingsProductType.fixed, 365);
     expect(draft.toCreateRequest(quote)!.toJson(), {
-      'productCode': 'boctrustFixedDeposit',
-      'tenorDays': 365,
-      'amount': '5000.00',
-      'planName': 'School fees',
-      'saveFrequency': 'weekly',
-      'recurringAmount': '1500.00',
-    });
-    expect(draft.copyWith(recurringAmount: '').toCreateRequest(quote), isNull);
-    expect(draft.copyWith(autoSave: false).toCreateRequest(quote)!.toJson(), {
       'productCode': 'boctrustFixedDeposit',
       'tenorDays': 365,
       'amount': '5000.00',

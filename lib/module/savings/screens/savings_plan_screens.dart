@@ -762,10 +762,10 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
       if (_draft.autoSave) _WizardStep.days,
       _WizardStep.confirm,
     ],
+    // Core takes a recurring schedule for target savings only.
     SavingsProductType.fixed => [
       _WizardStep.schedule,
       _WizardStep.amount,
-      if (_draft.autoSave) _WizardStep.days,
       _WizardStep.confirm,
     ],
     SavingsProductType.padi => [
@@ -804,18 +804,22 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
   SavingsQuoteKey? get _quoteKey {
     final product = _product;
     if (product == null) return null;
-    if (_draft.tenorDaysOn(DateTime.now(), product) == null) return null;
+    final now = DateTime.now();
+    if (_draft.tenorDaysOn(now, product) == null) return null;
+    final today = DateTime(now.year, now.month, now.day);
     final custom = _draft.customMaturityDate;
     return custom == null
         ? (
             productCode: product.productCode,
             tenorDays: savingsMonthPresetDays[_draft.durationMonths],
             endDate: null,
+            today: today,
           )
         : (
             productCode: product.productCode,
             tenorDays: null,
             endDate: DateTime(custom.year, custom.month, custom.day),
+            today: today,
           );
   }
 
@@ -1064,8 +1068,13 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
   AsyncValue<NotifierState<List<SavingsPlanProduct>>>? _watchCoreTerms() {
     if (!_createsInCore) return null;
     final catalogue = ref.watch(savingsPlanProductsProvider);
+    // A product with no tenor bands has no terms to open a plan on.
     _product = catalogue.value?.data
-        ?.where((product) => product.productCode == widget.type.coreCode)
+        ?.where(
+          (product) =>
+              product.productCode == widget.type.coreCode &&
+              product.tenors.isNotEmpty,
+        )
         .firstOrNull;
     final key = _quoteKey;
     final quote = key == null ? null : ref.watch(savingsPlanQuoteProvider(key));
@@ -1451,19 +1460,15 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
               style: theme.textTheme.bodySmall,
             ),
           ..._quoteSection(theme),
-          if (_createsInCore) ...[
+          if (widget.type == SavingsProductType.smartSave) ...[
             const SizedBox(height: BocSpace.md),
             SettingsGroup(
               padding: EdgeInsets.zero,
               children: [
                 SettingsTile.toggle(
                   icon: IconsaxPlusLinear.repeat,
-                  title: widget.type == SavingsProductType.fixed
-                      ? 'Set recurring payments'
-                      : 'Auto-save',
-                  subtitle: widget.type == SavingsProductType.fixed
-                      ? 'Add money to this deposit automatically'
-                      : 'Save automatically on a schedule',
+                  title: 'Auto-save',
+                  subtitle: 'Save automatically on a schedule',
                   value: _draft.autoSave,
                   onChanged: (value) =>
                       _update(_draft.copyWith(autoSave: value)),
@@ -1707,14 +1712,7 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
                 if (customDate != null && quote != null)
                   (label: 'Duration', value: '${quote.tenorDays} days'),
                 if (quote != null) ..._quoteRows(quote, withLimits: false),
-                if (fixed)
-                  (
-                    label: 'Recurring payments',
-                    value: frequency != null && recurring != null
-                        ? '$recurring ${frequency.label.toLowerCase()}'
-                        : 'Not set',
-                  )
-                else
+                if (!fixed)
                   (
                     label: 'Auto-save',
                     value: frequency != null && recurring != null

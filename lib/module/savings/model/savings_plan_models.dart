@@ -488,7 +488,8 @@ class SavingsPlanProduct extends Equatable {
   final List<SavingsPlanTenor> tenors;
 
   /// The shortest plan Core accepts, in days: its stated bound, else the
-  /// shortest band.
+  /// shortest band. A product with no bands is never offered, so the
+  /// fallback of one day is never shown.
   int get shortestTenorDays {
     final stated = minTenorDays;
     if (stated != null) return stated;
@@ -734,12 +735,13 @@ bool periodicSavingsAmountValid(String text) =>
     };
 
 /// The body of POST /me/savings-plans. Amounts are Naira strings; null
-/// fields are left out.
+/// fields are left out. Exactly one of [tenorDays] and [endDate] is set.
 class CreateSavingsPlanRequest extends Equatable {
   const CreateSavingsPlanRequest({
     required this.productCode,
-    required this.tenorDays,
     required this.amount,
+    this.tenorDays,
+    this.endDate,
     this.planName,
     this.targetAmount,
     this.saveFrequency,
@@ -747,7 +749,10 @@ class CreateSavingsPlanRequest extends Equatable {
   });
 
   final String productCode;
-  final int tenorDays;
+  final int? tenorDays;
+
+  /// The maturity date the customer chose, sent as `YYYY-MM-DD`.
+  final DateTime? endDate;
 
   /// The first deposit Core moves from Boc Flex at creation, in Naira.
   final String amount;
@@ -758,7 +763,8 @@ class CreateSavingsPlanRequest extends Equatable {
 
   Map<String, Object> toJson() => {
     'productCode': productCode,
-    'tenorDays': tenorDays,
+    'tenorDays': ?tenorDays,
+    if (endDate case final date?) 'endDate': formatCoreDateOnly(date),
     'amount': amount,
     'planName': ?planName,
     'targetAmount': ?targetAmount,
@@ -770,6 +776,7 @@ class CreateSavingsPlanRequest extends Equatable {
   List<Object?> get props => [
     productCode,
     tenorDays,
+    endDate,
     amount,
     planName,
     targetAmount,
@@ -877,35 +884,43 @@ class SavingsPlanDraft extends Equatable {
   /// Null for Flex and Padi, for another product's quote, or when an amount
   /// cannot be read or falls outside the quote's limits. Fixed sends the
   /// typed principal as `amount`; SmartSave sends the quote's minimum, the
-  /// opening deposit it shows. Auto-save fields go only when auto-save is on.
+  /// opening deposit it shows. A custom maturity date is sent as `endDate`,
+  /// so the plan matures on the date chosen; a preset sends the quote's
+  /// `tenorDays`. Auto-save fields are SmartSave's only, and go only when
+  /// auto-save is on.
   CreateSavingsPlanRequest? toCreateRequest(SavingsPlanQuote quote) {
     final code = type.coreCode;
     if (code == null || quote.productCode != code) return null;
     final planName = name.trim().isEmpty ? null : name.trim();
-    final recurring = autoSave ? savingsPlanNaira(recurringAmount) : null;
-    if (autoSave &&
-        (frequency == null ||
-            recurring == null ||
-            !periodicSavingsAmountValid(recurringAmount))) {
-      return null;
-    }
+    final custom = customMaturityDate;
+    final endDate = custom == null
+        ? null
+        : DateTime(custom.year, custom.month, custom.day);
+    final tenorDays = endDate == null ? quote.tenorDays : null;
     final typed = savingsPlanNaira(amount);
     switch (type) {
       case SavingsProductType.fixed:
         if (typed == null || !quote.acceptsDeposit(amount)) return null;
         return CreateSavingsPlanRequest(
           productCode: code,
-          tenorDays: quote.tenorDays,
+          tenorDays: tenorDays,
+          endDate: endDate,
           amount: typed,
           planName: planName,
-          saveFrequency: autoSave ? frequency : null,
-          recurringAmount: recurring,
         );
       case SavingsProductType.smartSave:
+        final recurring = autoSave ? savingsPlanNaira(recurringAmount) : null;
+        if (autoSave &&
+            (frequency == null ||
+                recurring == null ||
+                !periodicSavingsAmountValid(recurringAmount))) {
+          return null;
+        }
         if (typed == null || !quote.acceptsTarget(amount)) return null;
         return CreateSavingsPlanRequest(
           productCode: code,
-          tenorDays: quote.tenorDays,
+          tenorDays: tenorDays,
+          endDate: endDate,
           amount: quote.minAmount,
           planName: planName,
           targetAmount: typed,
