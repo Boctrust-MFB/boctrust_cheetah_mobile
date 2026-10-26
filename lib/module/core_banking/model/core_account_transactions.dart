@@ -16,14 +16,10 @@ enum CoreHistoryRange {
   ({String fromDate, String toDate}) window(DateTime today) {
     final to = DateTime(today.year, today.month, today.day);
     return (
-      fromDate: _format(to.subtract(Duration(days: days))),
-      toDate: _format(to),
+      fromDate: formatCoreDateOnly(to.subtract(Duration(days: days))),
+      toDate: formatCoreDateOnly(to),
     );
   }
-
-  static String _format(DateTime date) =>
-      '${date.year}-${_two(date.month)}-${_two(date.day)}';
-  static String _two(int value) => value.toString().padLeft(2, '0');
 }
 
 enum CoreTransactionType { credit, debit }

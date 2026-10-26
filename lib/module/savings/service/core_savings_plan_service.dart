@@ -72,8 +72,44 @@ class CoreSavingsPlanService {
     );
   }
 
-  /// Creates a plan that Core funds from Boc Flex with the product's minimum
-  /// for the term, and returns its `planId`. Never retried.
+  /// The SmartSave and Fixed Deposit products a plan can be opened on.
+  Future<NotifierState<List<SavingsPlanProduct>>> getSavingsProducts() async {
+    final api = _api;
+    if (api == null) return const NotifierState.blocked(_plansUnavailable);
+    return NotifierState.fromResponse(
+      await api.getData<List<SavingsPlanProduct>>(
+        CoreApiEndpoints.savingsProducts,
+        parser: SavingsPlanProduct.listFromJson,
+      ),
+    );
+  }
+
+  /// What Core would apply to a plan of [productCode] lasting [tenorDays] or
+  /// maturing on [endDate]; exactly one must be given. 400 when the duration
+  /// is out of range, 404 when the product is unknown or inactive.
+  Future<NotifierState<SavingsPlanQuote>> quoteSavingsProduct(
+    String productCode, {
+    int? tenorDays,
+    DateTime? endDate,
+  }) async {
+    final api = _api;
+    if (api == null) return const NotifierState.blocked(_plansUnavailable);
+    if ((tenorDays == null) == (endDate == null)) {
+      return const NotifierState.error('Choose how long you will save.');
+    }
+    return NotifierState.fromResponse(
+      await api.getData<SavingsPlanQuote>(
+        CoreApiEndpoints.savingsProductQuote(productCode),
+        queryParameters: endDate == null
+            ? {'tenorDays': tenorDays}
+            : {'endDate': formatCoreDateOnly(endDate)},
+        parser: SavingsPlanQuote.fromJson,
+      ),
+    );
+  }
+
+  /// Creates a plan that Core funds from Boc Flex with the request's
+  /// `amount`, and returns its `planId`. Never retried.
   Future<NotifierState<String>> createPlan(
     CreateSavingsPlanRequest request,
   ) async {
@@ -127,6 +163,23 @@ class CoreSavingsPlanService {
           if (result == null) throw const FormatException('Invalid result.');
           return result;
         },
+      ),
+    );
+  }
+
+  /// Soft-deletes a plan with no money in it. Core takes no body: 404 when it
+  /// is not the caller's, 409 when money remains or interest is still being
+  /// paid. Never retried: a delete whose outcome is unknown is reconciled by
+  /// refreshing, not resending.
+  Future<NotifierState<SavingsPlanDeleteResult>> deletePlan(
+    String planId,
+  ) async {
+    final api = _api;
+    if (api == null) return const NotifierState.blocked(_plansUnavailable);
+    return NotifierState.fromResponse(
+      await api.deleteData<SavingsPlanDeleteResult>(
+        CoreApiEndpoints.savingsPlanDelete(planId),
+        parser: SavingsPlanDeleteResult.fromJson,
       ),
     );
   }

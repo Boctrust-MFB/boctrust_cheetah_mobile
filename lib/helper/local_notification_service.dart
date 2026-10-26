@@ -100,21 +100,7 @@ class LocalNotificationService {
         payload.notificationId,
         NotificationPayload.title,
         NotificationPayload.body,
-        const NotificationDetails(
-          android: AndroidNotificationDetails(
-            channelId,
-            channelName,
-            importance: Importance.high,
-            priority: Priority.high,
-            icon: androidSmallIcon,
-          ),
-          iOS: DarwinNotificationDetails(
-            presentAlert: true,
-            presentBanner: true,
-            presentList: true,
-            presentSound: true,
-          ),
-        ),
+        _details,
         payload: payload.toLocalPayload(),
       );
     } catch (error) {
@@ -124,6 +110,42 @@ class LocalNotificationService {
       );
     }
   }
+
+  /// Shows a notification the app itself raised, such as a saved file, on
+  /// the app's channel with no payload. Failures are logged without content
+  /// and never thrown; returns whether it was handed to the platform.
+  Future<bool> showAppNotification({
+    required String title,
+    required String body,
+  }) async {
+    if (!await initialize()) return false;
+    final id = NotificationPayload.stableId(
+      '$title:${DateTime.now().microsecondsSinceEpoch}',
+    );
+    try {
+      await _plugin.show(id, title, body, _details);
+      return true;
+    } catch (error) {
+      _log('Local notification $id not shown: ${error.runtimeType}');
+      return false;
+    }
+  }
+
+  static const _details = NotificationDetails(
+    android: AndroidNotificationDetails(
+      channelId,
+      channelName,
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: androidSmallIcon,
+    ),
+    iOS: DarwinNotificationDetails(
+      presentAlert: true,
+      presentBanner: true,
+      presentList: true,
+      presentSound: true,
+    ),
+  );
 
   /// The payload of the notification that launched the app, returned at most
   /// once per process: the plugin keeps reporting the same launch, which

@@ -31,13 +31,6 @@ enum SavingsProductType {
   /// plans and Padi has no plan routes.
   final String? coreCode;
 
-  /// Core moves this opening amount from Boc Flex when it creates a plan.
-  int? get openingMinimumNaira => switch (this) {
-    SavingsProductType.smartSave => 5000,
-    SavingsProductType.fixed => 1000,
-    SavingsProductType.flex || SavingsProductType.padi => null,
-  };
-
   static SavingsProductType? fromCoreCode(Object? code) {
     for (final type in values) {
       if (type.coreCode != null && type.coreCode == code) return type;
@@ -314,6 +307,46 @@ class SavingsPlanDetail extends Equatable {
   List<Object?> get props => [plan, events, accountNumber];
 }
 
+/// What Core reports after a soft delete. [status] and [deletedAt] are kept
+/// for the record only; nothing is driven from them.
+class SavingsPlanDeleteResult extends Equatable {
+  const SavingsPlanDeleteResult({
+    required this.planId,
+    this.status,
+    this.deletedAt,
+  });
+
+  final String planId;
+
+  /// `matured`, `liquidated` or `cancelled`; null when absent or not one of
+  /// those.
+  final SavingsPlanStatus? status;
+  final DateTime? deletedAt;
+
+  /// Throws [FormatException] when [value] is not an object with a `planId`.
+  factory SavingsPlanDeleteResult.fromJson(Object? value) {
+    final planId = value is Map ? coreText(value['planId']) : null;
+    if (value is! Map || planId == null) {
+      throw const FormatException('Invalid delete result.');
+    }
+    final status = SavingsPlanStatus.parse(value['status']);
+    final deletedAt = value['deletedAt'];
+    return SavingsPlanDeleteResult(
+      planId: planId,
+      status: switch (status) {
+        SavingsPlanStatus.matured ||
+        SavingsPlanStatus.liquidated ||
+        SavingsPlanStatus.cancelled => status,
+        _ => null,
+      },
+      deletedAt: deletedAt is String ? DateTime.tryParse(deletedAt) : null,
+    );
+  }
+
+  @override
+  List<Object?> get props => [planId, status, deletedAt];
+}
+
 /// What Core reports after a plan action (top-up, early withdrawal,
 /// creation). Amounts are Naira decimal strings; any may be absent.
 class SavingsPlanActionResult extends Equatable {
@@ -377,16 +410,300 @@ enum FundingSource {
   final String label;
 }
 
-/// Core's tenor, in days, for each term the wizard offers. Core rejects a
-/// tenor with no rate band for the product, and that message is shown.
-const tenorDaysForMonths = {3: 90, 6: 180, 9: 270, 12: 365};
-const maximumSavingsTenorDays = 365;
+/// Month labels the wizard offers, with the days each stands for. Labels
+/// only: a preset is offered when its days fall within the product's bounds,
+/// and the quote decides the rate and minimum.
+const savingsMonthPresetDays = {3: 90, 6: 180, 9: 270, 12: 365};
 
-int minimumSavingsTenorDays(SavingsProductType type) => switch (type) {
-  SavingsProductType.smartSave => 90,
-  SavingsProductType.fixed => 30,
-  SavingsProductType.flex || SavingsProductType.padi => 0,
-};
+/// Core never accepts a plan longer than a year.
+const _longestSavingsTenorDays = 365;
+
+/// One rate and first-deposit band of a product. Amounts and the rate are
+/// Core decimal strings.
+class SavingsPlanTenor extends Equatable {
+  const SavingsPlanTenor({
+    required this.tenorDays,
+    required this.interestRatePercent,
+    required this.minAmount,
+    this.maxAmount,
+  });
+
+  final int tenorDays;
+  final String interestRatePercent;
+
+  /// The smallest first deposit for this duration, in Naira.
+  final String minAmount;
+
+  /// The largest first deposit, in Naira; null when there is no maximum.
+  final String? maxAmount;
+
+  static SavingsPlanTenor? tryParse(Object? json) {
+    if (json is! Map) return null;
+    final days = _days(json['tenorDays']);
+    final rate = coreText(json['interestRatePercent']);
+    final min = coreNaira(json['minAmount']);
+    if (days == null || rate == null || min == null) return null;
+    return SavingsPlanTenor(
+      tenorDays: days,
+      interestRatePercent: rate,
+      minAmount: min,
+      maxAmount: coreNaira(json['maxAmount']),
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+    tenorDays,
+    interestRatePercent,
+    minAmount,
+    maxAmount,
+  ];
+}
+
+/// A product a plan can be opened on, from `GET /me/savings-products`.
+class SavingsPlanProduct extends Equatable {
+  const SavingsPlanProduct({
+    required this.productCode,
+    required this.productName,
+    required this.planType,
+    required this.earlyWithdrawalFeePercent,
+    required this.tenors,
+    this.description,
+    this.minTenorDays,
+    this.maxTenorDays,
+  });
+
+  final String productCode;
+  final String productName;
+  final String? description;
+
+  /// `fixed_deposit` or `target_savings`, as Core sends it.
+  final String planType;
+  final String earlyWithdrawalFeePercent;
+  final int? minTenorDays;
+  final int? maxTenorDays;
+
+  /// Rate and minimum-deposit bands, in Core order. Any length between the
+  /// bounds is valid, not only these.
+  final List<SavingsPlanTenor> tenors;
+
+  /// The shortest plan Core accepts, in days: its stated bound, else the
+  /// shortest band. A product with no bands is never offered, so the
+  /// fallback of one day is never shown.
+  int get shortestTenorDays {
+    final stated = minTenorDays;
+    if (stated != null) return stated;
+    final days = [for (final tenor in tenors) tenor.tenorDays];
+    return days.isEmpty ? 1 : days.reduce((a, b) => a < b ? a : b);
+  }
+
+  /// The longest plan Core accepts, in days: its stated bound, else the
+  /// longest band, never more than a year.
+  int get longestTenorDays {
+    final days = [for (final tenor in tenors) tenor.tenorDays];
+    final stated =
+        maxTenorDays ??
+        (days.isEmpty
+            ? _longestSavingsTenorDays
+            : days.reduce((a, b) => a > b ? a : b));
+    return stated > _longestSavingsTenorDays
+        ? _longestSavingsTenorDays
+        : stated;
+  }
+
+  bool allowsTenor(int days) =>
+      days >= shortestTenorDays && days <= longestTenorDays;
+
+  /// The month presets whose days fall within this product's bounds.
+  List<int> get presetMonths => [
+    for (final MapEntry(key: months, value: days)
+        in savingsMonthPresetDays.entries)
+      if (allowsTenor(days)) months,
+  ];
+
+  /// The smallest first deposit of any band, for copy shown before a
+  /// duration is chosen; the quote has the exact one.
+  String? get lowestMinAmount {
+    String? lowest;
+    BigInt? lowestKobo;
+    for (final tenor in tenors) {
+      final kobo = BigInt.parse(balanceToKobo(tenor.minAmount)!);
+      if (lowestKobo == null || kobo < lowestKobo) {
+        lowest = tenor.minAmount;
+        lowestKobo = kobo;
+      }
+    }
+    return lowest;
+  }
+
+  static SavingsPlanProduct? tryParse(Object? json) {
+    if (json is! Map) return null;
+    final code = coreText(json['productCode']);
+    final name = coreText(json['productName']);
+    final planType = coreText(json['planType']);
+    final fee = coreText(json['earlyWithdrawalFeePercent']);
+    final tenors = json['tenors'];
+    if (code == null ||
+        name == null ||
+        planType == null ||
+        fee == null ||
+        tenors is! List) {
+      return null;
+    }
+    return SavingsPlanProduct(
+      productCode: code,
+      productName: name,
+      description: coreText(json['description']),
+      planType: planType,
+      earlyWithdrawalFeePercent: fee,
+      minTenorDays: _days(json['minTenorDays']),
+      maxTenorDays: _days(json['maxTenorDays']),
+      tenors: List.unmodifiable(
+        tenors.map(SavingsPlanTenor.tryParse).whereType<SavingsPlanTenor>(),
+      ),
+    );
+  }
+
+  /// Every readable product, in Core order; a malformed row is dropped.
+  static List<SavingsPlanProduct> listFromJson(Object? json) {
+    if (json is! List) {
+      throw const FormatException('Missing savings products.');
+    }
+    return List.unmodifiable(
+      json.map(tryParse).whereType<SavingsPlanProduct>(),
+    );
+  }
+
+  @override
+  List<Object?> get props => [
+    productCode,
+    productName,
+    description,
+    planType,
+    earlyWithdrawalFeePercent,
+    minTenorDays,
+    maxTenorDays,
+    tenors,
+  ];
+}
+
+/// What Core would apply to a plan of one duration, from
+/// `GET /me/savings-products/{productCode}/quote`. It uses the same rules as
+/// creating a plan, so its rate and first-deposit limits are authoritative.
+class SavingsPlanQuote extends Equatable {
+  const SavingsPlanQuote({
+    required this.productCode,
+    required this.productName,
+    required this.tenorDays,
+    required this.startDate,
+    required this.endDate,
+    required this.interestRatePercent,
+    required this.minAmount,
+    required this.earlyWithdrawalFeePercent,
+    this.maxAmount,
+  });
+
+  final String productCode;
+  final String productName;
+  final int tenorDays;
+  final DateTime startDate;
+
+  /// The maturity date.
+  final DateTime endDate;
+  final String interestRatePercent;
+
+  /// The smallest first deposit, in Naira.
+  final String minAmount;
+
+  /// The largest first deposit, in Naira; null when there is no maximum.
+  final String? maxAmount;
+  final String earlyWithdrawalFeePercent;
+
+  factory SavingsPlanQuote.fromJson(Object? json) {
+    if (json is! Map) throw const FormatException('Invalid savings quote.');
+    final code = coreText(json['productCode']);
+    final name = coreText(json['productName']);
+    final days = _days(json['tenorDays']);
+    final start = DateTime.tryParse(coreText(json['startDate']) ?? '');
+    final end = DateTime.tryParse(coreText(json['endDate']) ?? '');
+    final rate = coreText(json['interestRatePercent']);
+    final min = coreNaira(json['minAmount']);
+    final fee = coreText(json['earlyWithdrawalFeePercent']);
+    final rawMax = json['maxAmount'];
+    final max = coreNaira(rawMax);
+    if (code == null ||
+        name == null ||
+        days == null ||
+        start == null ||
+        end == null ||
+        rate == null ||
+        min == null ||
+        fee == null ||
+        (rawMax != null && max == null)) {
+      throw const FormatException('Invalid savings quote.');
+    }
+    return SavingsPlanQuote(
+      productCode: code,
+      productName: name,
+      tenorDays: days,
+      startDate: start,
+      endDate: end,
+      interestRatePercent: rate,
+      minAmount: min,
+      maxAmount: max,
+      earlyWithdrawalFeePercent: fee,
+    );
+  }
+
+  BigInt get _minKobo => BigInt.parse(balanceToKobo(minAmount)!);
+
+  BigInt? get _maxKobo {
+    final max = maxAmount;
+    return max == null ? null : BigInt.parse(balanceToKobo(max)!);
+  }
+
+  /// Whether typed [text] is a first deposit Core accepts: at least
+  /// [minAmount] and at most [maxAmount] when set.
+  bool acceptsDeposit(String text) {
+    final kobo = _typedKobo(text);
+    final max = _maxKobo;
+    return kobo != null && kobo >= _minKobo && (max == null || kobo <= max);
+  }
+
+  /// Whether typed [text] is a SmartSave target Core accepts: above the
+  /// opening deposit ([minAmount]) and at most [maxAmount] when set.
+  bool acceptsTarget(String text) {
+    final kobo = _typedKobo(text);
+    final max = _maxKobo;
+    return kobo != null && kobo > _minKobo && (max == null || kobo <= max);
+  }
+
+  /// Whether typed [text] is more than a set [maxAmount].
+  bool exceedsMax(String text) {
+    final kobo = _typedKobo(text);
+    final max = _maxKobo;
+    return kobo != null && max != null && kobo > max;
+  }
+
+  @override
+  List<Object?> get props => [
+    productCode,
+    productName,
+    tenorDays,
+    startDate,
+    endDate,
+    interestRatePercent,
+    minAmount,
+    maxAmount,
+    earlyWithdrawalFeePercent,
+  ];
+}
+
+BigInt? _typedKobo(String text) =>
+    switch (parseNairaToKobo(text, maxKobo: savingsPlanMaxKobo)) {
+      ValidMoney(:final minorUnits) => BigInt.parse(minorUnits),
+      InvalidMoney() => null,
+    };
 
 /// Calendar dates are compared in UTC to count whole dates consistently even
 /// on devices whose local clock crosses a daylight-saving boundary.
@@ -417,23 +734,14 @@ bool periodicSavingsAmountValid(String text) =>
       InvalidMoney() => false,
     };
 
-/// A SmartSave target must exceed the amount used to open the goal.
-bool smartSaveTargetValid(String text) => switch (parseNairaToKobo(
-  text,
-  maxKobo: savingsPlanMaxKobo,
-)) {
-  ValidMoney(:final minorUnits) =>
-    BigInt.parse(minorUnits) >
-        BigInt.from(SavingsProductType.smartSave.openingMinimumNaira! * 100),
-  InvalidMoney() => false,
-};
-
 /// The body of POST /me/savings-plans. Amounts are Naira strings; null
-/// fields are left out.
+/// fields are left out. Exactly one of [tenorDays] and [endDate] is set.
 class CreateSavingsPlanRequest extends Equatable {
   const CreateSavingsPlanRequest({
     required this.productCode,
-    required this.tenorDays,
+    required this.amount,
+    this.tenorDays,
+    this.endDate,
     this.planName,
     this.targetAmount,
     this.saveFrequency,
@@ -441,7 +749,13 @@ class CreateSavingsPlanRequest extends Equatable {
   });
 
   final String productCode;
-  final int tenorDays;
+  final int? tenorDays;
+
+  /// The maturity date the customer chose, sent as `YYYY-MM-DD`.
+  final DateTime? endDate;
+
+  /// The first deposit Core moves from Boc Flex at creation, in Naira.
+  final String amount;
   final String? planName;
   final String? targetAmount;
   final SavingsFrequency? saveFrequency;
@@ -449,7 +763,9 @@ class CreateSavingsPlanRequest extends Equatable {
 
   Map<String, Object> toJson() => {
     'productCode': productCode,
-    'tenorDays': tenorDays,
+    'tenorDays': ?tenorDays,
+    if (endDate case final date?) 'endDate': formatCoreDateOnly(date),
+    'amount': amount,
     'planName': ?planName,
     'targetAmount': ?targetAmount,
     'saveFrequency': ?saveFrequency?.name,
@@ -460,6 +776,8 @@ class CreateSavingsPlanRequest extends Equatable {
   List<Object?> get props => [
     productCode,
     tenorDays,
+    endDate,
+    amount,
     planName,
     targetAmount,
     saveFrequency,
@@ -552,71 +870,61 @@ class SavingsPlanDraft extends Equatable {
     startDate,
   ];
 
-  /// What Core needs to create this plan. Null for Flex and Padi, without a
-  /// term, or when an amount cannot be read. Auto-save fields go only when
-  /// auto-save is on.
-  int? tenorDaysOn(DateTime today) {
+  /// The chosen length in days when it is within [product]'s bounds: the
+  /// preset's days, or the days from [today] to the custom maturity date.
+  int? tenorDaysOn(DateTime today, SavingsPlanProduct product) {
     final customDate = customMaturityDate;
     final days = customDate == null
-        ? tenorDaysForMonths[durationMonths]
+        ? savingsMonthPresetDays[durationMonths]
         : daysUntilSavingsDate(today, customDate);
-    return days != null &&
-            days >= minimumSavingsTenorDays(type) &&
-            days <= maximumSavingsTenorDays
-        ? days
-        : null;
+    return days != null && product.allowsTenor(days) ? days : null;
   }
 
-  CreateSavingsPlanRequest? toCreateRequest({DateTime? today}) {
+  /// What Core needs to create this plan on the duration [quote] covers.
+  /// Null for Flex and Padi, for another product's quote, or when an amount
+  /// cannot be read or falls outside the quote's limits. Fixed sends the
+  /// typed principal as `amount`; SmartSave sends the quote's minimum, the
+  /// opening deposit it shows. A custom maturity date is sent as `endDate`,
+  /// so the plan matures on the date chosen; a preset sends the quote's
+  /// `tenorDays`. Auto-save fields are SmartSave's only, and go only when
+  /// auto-save is on.
+  CreateSavingsPlanRequest? toCreateRequest(SavingsPlanQuote quote) {
     final code = type.coreCode;
-    final tenor = tenorDaysOn(today ?? DateTime.now());
-    if (code == null || tenor == null) return null;
+    if (code == null || quote.productCode != code) return null;
     final planName = name.trim().isEmpty ? null : name.trim();
+    final custom = customMaturityDate;
+    final endDate = custom == null
+        ? null
+        : DateTime(custom.year, custom.month, custom.day);
+    final tenorDays = endDate == null ? quote.tenorDays : null;
+    final typed = savingsPlanNaira(amount);
     switch (type) {
       case SavingsProductType.fixed:
-        if (autoSave) {
-          final recurring = savingsPlanNaira(recurringAmount);
-          if (frequency == null ||
-              recurring == null ||
-              !periodicSavingsAmountValid(recurringAmount)) {
-            return null;
-          }
-          return CreateSavingsPlanRequest(
-            productCode: code,
-            tenorDays: tenor,
-            planName: planName,
-            saveFrequency: frequency,
-            recurringAmount: recurring,
-          );
-        }
+        if (typed == null || !quote.acceptsDeposit(amount)) return null;
         return CreateSavingsPlanRequest(
           productCode: code,
-          tenorDays: tenor,
+          tenorDays: tenorDays,
+          endDate: endDate,
+          amount: typed,
           planName: planName,
         );
       case SavingsProductType.smartSave:
-        if (!smartSaveTargetValid(amount)) return null;
-        final target = savingsPlanNaira(amount)!;
-        if (!autoSave) {
-          return CreateSavingsPlanRequest(
-            productCode: code,
-            tenorDays: tenor,
-            planName: planName,
-            targetAmount: target,
-          );
-        }
-        final recurring = savingsPlanNaira(recurringAmount);
-        if (frequency == null ||
-            recurring == null ||
-            !periodicSavingsAmountValid(recurringAmount)) {
+        final recurring = autoSave ? savingsPlanNaira(recurringAmount) : null;
+        if (autoSave &&
+            (frequency == null ||
+                recurring == null ||
+                !periodicSavingsAmountValid(recurringAmount))) {
           return null;
         }
+        if (typed == null || !quote.acceptsTarget(amount)) return null;
         return CreateSavingsPlanRequest(
           productCode: code,
-          tenorDays: tenor,
+          tenorDays: tenorDays,
+          endDate: endDate,
+          amount: quote.minAmount,
           planName: planName,
-          targetAmount: target,
-          saveFrequency: frequency,
+          targetAmount: typed,
+          saveFrequency: autoSave ? frequency : null,
           recurringAmount: recurring,
         );
       case SavingsProductType.flex || SavingsProductType.padi:

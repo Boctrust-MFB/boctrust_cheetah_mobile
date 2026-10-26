@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/core_api_endpoints.dart';
@@ -7,13 +10,13 @@ import '../../../app/network.dart';
 import '../../../app/services.dart';
 import '../model/account_freeze_models.dart';
 import '../model/bank_product_models.dart';
+import '../model/core_account_statement.dart';
 import '../model/core_account_summary.dart';
 import '../model/core_account_transactions.dart';
+import '../model/core_json.dart';
 import '../model/customer_bank_account_models.dart';
 
 const _coreUnavailable = 'Account services are not available right now.';
-
-final _accountNumber = RegExp(r'^\d{10}$');
 
 final coreAccountServiceProvider = Provider<CoreAccountService>(
   (ref) => CoreAccountService(ref.watch(coreApiServiceProvider)),
@@ -45,7 +48,7 @@ class CoreAccountService {
   ) async {
     final api = _api;
     if (api == null) return const NotifierState.blocked(_coreUnavailable);
-    if (!_accountNumber.hasMatch(accountNumber)) {
+    if (!isCoreAccountNumber(accountNumber)) {
       return const NotifierState.error('Account not found.');
     }
     return NotifierState.fromResponse(
@@ -65,7 +68,7 @@ class CoreAccountService {
   ) async {
     final api = _api;
     if (api == null) return const NotifierState.blocked(_coreUnavailable);
-    if (!_accountNumber.hasMatch(accountNumber)) {
+    if (!isCoreAccountNumber(accountNumber)) {
       return const NotifierState.error('Account not found.');
     }
     return NotifierState.fromResponse(
@@ -87,7 +90,7 @@ class CoreAccountService {
   }) async {
     final api = _api;
     if (api == null) return const NotifierState.blocked(_coreUnavailable);
-    if (!_accountNumber.hasMatch(accountNumber)) {
+    if (!isCoreAccountNumber(accountNumber)) {
       return const NotifierState.error('Account not found.');
     }
     final (:fromDate, :toDate) = range.window(today ?? DateTime.now());
@@ -103,6 +106,61 @@ class CoreAccountService {
         parser: CoreTransactionPage.fromJson,
       ),
     );
+  }
+
+  /// A PDF statement of one of the caller's accounts over
+  /// [fromDate]..[toDate]. A number that is not ten digits, or a range Core
+  /// would reject, is never sent.
+  Future<NotifierState<CoreAccountStatement>> getAccountStatement(
+    String accountNumber, {
+    required DateTime fromDate,
+    required DateTime toDate,
+  }) async {
+    final api = _api;
+    if (api == null) return const NotifierState.blocked(_coreUnavailable);
+    if (!isCoreAccountNumber(accountNumber)) {
+      return const NotifierState.error('Account not found.');
+    }
+    final rangeError = coreStatementRangeError(
+      fromDate,
+      toDate,
+      today: DateTime.now(),
+    );
+    if (rangeError != null) return NotifierState.error(rangeError);
+    final reply = NotifierState.fromResponse(
+      await api.getData<CoreAccountStatementReply>(
+        CoreApiEndpoints.bankAccountStatement(accountNumber),
+        queryParameters: {
+          'fromDate': formatCoreDateOnly(fromDate),
+          'toDate': formatCoreDateOnly(toDate),
+        },
+        parser: CoreAccountStatementReply.fromJson,
+      ),
+    );
+    final parsed = reply.data;
+    if (!reply.isDone || parsed == null) {
+      return NotifierState<CoreAccountStatement>(
+        status: reply.status,
+        message: reply.message,
+        statusCode: reply.statusCode,
+        errorCode: reply.errorCode,
+        errors: reply.errors,
+        meta: reply.meta,
+        noAuth: reply.noAuth,
+      );
+    }
+    // A statement can be megabytes of base64; decode it off the UI isolate.
+    // Invalid base64, an empty PDF, or a decode that fails outright (isolate
+    // spawn, memory) is an invalid reply, never a crash.
+    try {
+      final bytes = await compute(base64Decode, parsed.content);
+      return NotifierState.done(
+        parsed.withBytes(bytes),
+        statusCode: reply.statusCode,
+      );
+    } on Object {
+      return const NotifierState.error('The server response was invalid.');
+    }
   }
 
   Future<NotifierState<List<CoreBankProduct>>> getBankProducts() async {
@@ -164,7 +222,7 @@ class CoreAccountService {
     Map<String, Object?>? body,
     T Function(Object? json) parser,
   ) async {
-    if (!_accountNumber.hasMatch(accountNumber)) {
+    if (!isCoreAccountNumber(accountNumber)) {
       return FreezeNotFound<T>();
     }
     final api = _api;

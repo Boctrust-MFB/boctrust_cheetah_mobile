@@ -664,61 +664,212 @@ extension _AccountControlScreens on _AccountPageState {
   }
 
   Widget _accountStatementScreen() {
-    assertPlaceholderFor(
-      FeatureCapability.accountStatement,
-      FeatureAvailability.unavailable,
-    );
-    final theme = Theme.of(context);
     return AppScaffold(
       title: 'Account statement',
       activeSection: AppSection.account,
       onBack: back,
       onSectionSelected: goSection,
       showBottomNavigation: false,
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(BocSpace.gutter),
-              children: [
-                Semantics(
-                  header: true,
-                  child: Text(
-                    'Request statement of account',
-                    style: theme.textTheme.headlineSmall,
-                  ),
+      body: const _StatementRequestForm(),
+    );
+  }
+}
+
+/// Chooses an account and period, asks Core for the PDF statement and saves
+/// it. The account and period stay selected after a failure or a cancelled
+/// save so the customer can retry.
+class _StatementRequestForm extends ConsumerStatefulWidget {
+  const _StatementRequestForm();
+
+  @override
+  ConsumerState<_StatementRequestForm> createState() =>
+      _StatementRequestFormState();
+}
+
+class _StatementRequestFormState extends ConsumerState<_StatementRequestForm> {
+  String? _selectedAccount;
+  DateTimeRange? _range;
+
+  /// True from the tap until the save dialog closes.
+  bool _busy = false;
+
+  List<CustomerBankAccount> _eligible(CustomerBankAccountsData? data) => [
+    for (final account in data?.accounts ?? const <CustomerBankAccount>[])
+      if (isCoreAccountNumber(account.accountNumber) &&
+          account.status != CoreAccountStatus.closed)
+        account,
+  ];
+
+  /// The chosen account, else BocFlex, else the first eligible one.
+  CustomerBankAccount? _current(List<CustomerBankAccount> accounts) {
+    for (final account in accounts) {
+      if (account.accountNumber == _selectedAccount) return account;
+    }
+    for (final account in accounts) {
+      if (account.productCode == kFlexProductCode) return account;
+    }
+    return accounts.isEmpty ? null : accounts.first;
+  }
+
+  Future<void> _request(String accountNumber, DateTimeRange range) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await _requestAndSave(accountNumber, range);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _requestAndSave(
+    String accountNumber,
+    DateTimeRange range,
+  ) async {
+    final result = await ref
+        .read(coreAccountStatementProvider.notifier)
+        .request(accountNumber, range.start, range.end);
+    if (!mounted) return;
+    final statement = result.data;
+    if (!result.isDone || statement == null) {
+      ResponseHandler.showError(
+        result.message ?? 'We could not get your statement.',
+      );
+      return;
+    }
+    try {
+      final saved = await FilePicker.platform.saveFile(
+        fileName: statement.fileName,
+        bytes: statement.bytes,
+      );
+      // A null result is the customer closing the save dialog.
+      if (saved == null) return;
+      ResponseHandler.showSuccess('Statement saved.');
+      _notifySaved(statement.fileName);
+    } on Object {
+      ResponseHandler.showError('We could not save your statement.');
+    }
+  }
+
+  /// Also reports the save as a local notification when the app has a
+  /// notification service; the snackbar alone covers the rest.
+  void _notifySaved(String fileName) {
+    ref
+        .read(localNotificationServiceProvider)
+        ?.showAppNotification(title: 'Statement saved', body: fileName)
+        .ignore();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accountsState = ref.watch(customerBankAccountsProvider);
+    if (accountsState.status == ServiceStatus.idle &&
+        ref.read(authSessionProvider) != null) {
+      Future<void>.microtask(
+        ref.read(customerBankAccountsProvider.notifier).load,
+      );
+    }
+    final available = ref
+        .watch(featureAvailabilityProvider(FeatureCapability.accountStatement))
+        .isAvailable;
+    final requesting = _busy;
+    // Keeps the autoDispose notifier alive while a request is running.
+    ref.watch(coreAccountStatementProvider);
+    final accounts = _eligible(accountsState.data);
+    final account = _current(accounts);
+    final range = _range;
+    final canRequest =
+        !requesting && available && account != null && range != null;
+
+    final Widget accountField;
+    if (accounts.length > 1) {
+      accountField = DropdownButtonFormField<String>(
+        // initialValue is read once; a new key rebuilds the field whenever
+        // the account the request uses changes.
+        key: ValueKey(account?.accountNumber),
+        initialValue: account?.accountNumber,
+        decoration: const InputDecoration(labelText: 'Account'),
+        items: [
+          for (final item in accounts)
+            DropdownMenuItem(
+              value: item.accountNumber,
+              child: Text('${item.productName} · ${item.accountNumber}'),
+            ),
+        ],
+        onChanged: requesting
+            ? null
+            : (value) => setState(() => _selectedAccount = value),
+      );
+    } else if (account != null) {
+      accountField = Text(
+        '${account.productName} · ${account.accountNumber}',
+        key: const Key('statement-account'),
+        style: theme.textTheme.bodyLarge,
+      );
+    } else if (accountsState.isLoading ||
+        accountsState.status == ServiceStatus.idle) {
+      accountField = const Center(child: CircularProgressIndicator());
+    } else {
+      accountField = Text(
+        accountsState.isError
+            ? accountsState.message ?? 'Unable to load your accounts.'
+            : 'You have no account to request a statement for.',
+        style: theme.textTheme.bodyMedium,
+      );
+    }
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(BocSpace.gutter),
+            children: [
+              Semantics(
+                header: true,
+                child: Text(
+                  'Request statement of account',
+                  style: theme.textTheme.headlineSmall,
                 ),
+              ),
+              const SizedBox(height: BocSpace.xs),
+              Text(
+                'Choose an account and a period of up to 12 months. '
+                'Your statement is saved as a PDF.',
+                style: theme.textTheme.bodyMedium,
+              ),
+              if (!available) ...[
                 const SizedBox(height: BocSpace.xs),
                 Text(
-                  'Your statement will be sent to the email address '
-                  'registered with your account.',
+                  'Statements are not available yet.',
                   style: theme.textTheme.bodyMedium,
                 ),
-                const SizedBox(height: BocSpace.lg),
-                _StatementPeriodField(
-                  key: const Key('statement-period'),
-                  onChanged: (_) {},
-                ),
               ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              BocSpace.gutter,
-              0,
-              BocSpace.gutter,
-              BocSpace.md,
-            ),
-            child: PrimaryButton(
-              label: 'Request statement',
-              onPressed: () => BocUnavailableSheet.show(
-                context,
-                title: 'Statement requests are not available yet',
+              const SizedBox(height: BocSpace.lg),
+              accountField,
+              const SizedBox(height: BocSpace.md),
+              _StatementPeriodField(
+                key: const Key('statement-period'),
+                onChanged: (value) => setState(() => _range = value),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            BocSpace.gutter,
+            0,
+            BocSpace.gutter,
+            BocSpace.md,
+          ),
+          child: PrimaryButton(
+            label: 'Request statement',
+            isLoading: requesting,
+            onPressed: canRequest
+                ? () => _request(account.accountNumber, range)
+                : null,
+          ),
+        ),
+      ],
     );
   }
 }
