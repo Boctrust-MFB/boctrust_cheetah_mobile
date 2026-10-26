@@ -32,10 +32,22 @@ class CoreAccountStatementNotifier
       return const NotifierState.error(coreStatementBusyMessage);
     }
     state = const NotifierState.loading();
-    final result = await ref
-        .read(coreAccountServiceProvider)
-        .getAccountStatement(accountNumber, fromDate: fromDate, toDate: toDate);
-    if (ref.mounted) state = result;
+    var result = const NotifierState<CoreAccountStatement>.error(
+      'We could not get your statement.',
+    );
+    try {
+      result = await ref
+          .read(coreAccountServiceProvider)
+          .getAccountStatement(
+            accountNumber,
+            fromDate: fromDate,
+            toDate: toDate,
+          );
+    } on Object {
+      // The result stays the error above; the state must never stay loading.
+    } finally {
+      if (ref.mounted) state = result;
+    }
     return result;
   }
 }

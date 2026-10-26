@@ -150,14 +150,15 @@ class CoreAccountService {
       );
     }
     // A statement can be megabytes of base64; decode it off the UI isolate.
-    // Invalid base64 or an empty PDF is an invalid reply, never a crash.
+    // Invalid base64, an empty PDF, or a decode that fails outright (isolate
+    // spawn, memory) is an invalid reply, never a crash.
     try {
       final bytes = await compute(base64Decode, parsed.content);
       return NotifierState.done(
         parsed.withBytes(bytes),
         statusCode: reply.statusCode,
       );
-    } on FormatException {
+    } on Object {
       return const NotifierState.error('The server response was invalid.');
     }
   }
