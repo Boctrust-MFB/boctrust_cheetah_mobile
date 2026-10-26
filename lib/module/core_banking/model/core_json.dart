@@ -39,6 +39,17 @@ List<Object?> coreRows(Object? json, List<String> keys) {
   throw const FormatException('Missing list.');
 }
 
+final _coreAccountNumber = RegExp(r'^\d{10}$');
+
+/// Whether [value] is a Core account number: exactly ten digits.
+bool isCoreAccountNumber(String value) => _coreAccountNumber.hasMatch(value);
+
+/// `YYYY-MM-DD` for [date], the date-only form Core's queries and bodies take.
+String formatCoreDateOnly(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-'
+    '${date.month.toString().padLeft(2, '0')}-'
+    '${date.day.toString().padLeft(2, '0')}';
+
 final _nairaText = RegExp(r'^\d+(\.\d+)?$');
 
 /// A Naira amount as Core documents it: a non-negative decimal string

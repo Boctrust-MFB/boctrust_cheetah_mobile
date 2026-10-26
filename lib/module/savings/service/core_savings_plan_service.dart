@@ -4,7 +4,6 @@ import '../../../app/core_api_endpoints.dart';
 import '../../../app/core_network.dart';
 import '../../../app/network.dart';
 import '../../../app/services.dart';
-import '../../core_banking/model/core_account_statement.dart';
 import '../../core_banking/model/core_json.dart';
 import '../model/interest_accrual_models.dart';
 import '../model/savings_plan_models.dart';

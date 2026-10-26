@@ -5,12 +5,6 @@ import 'core_json.dart';
 
 const _pdfContentType = 'application/pdf';
 
-/// `YYYY-MM-DD` for [date], the form Core's statement query takes.
-String formatCoreDateOnly(DateTime date) =>
-    '${date.year.toString().padLeft(4, '0')}-'
-    '${date.month.toString().padLeft(2, '0')}-'
-    '${date.day.toString().padLeft(2, '0')}';
-
 /// Why a statement range cannot be requested, or null when it can: the dates
 /// must be ordered, [toDate] no later than [today], and the span at most one
 /// calendar year. Time of day is ignored.

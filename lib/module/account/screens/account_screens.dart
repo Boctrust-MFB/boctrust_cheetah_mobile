@@ -20,6 +20,7 @@ import '../../app_flow/app_ui.dart';
 import '../../app_flow/flow_page.dart';
 import '../../component/password_strength_component.dart';
 import '../../component/text_fields.dart';
+import '../../core_banking/model/core_json.dart';
 import '../../core_banking/model/customer_bank_account_models.dart';
 import '../../core_banking/provider/biometric_transfer_provider.dart';
 import '../../core_banking/provider/core_account_providers.dart';

@@ -687,8 +687,6 @@ class _StatementRequestForm extends ConsumerStatefulWidget {
 }
 
 class _StatementRequestFormState extends ConsumerState<_StatementRequestForm> {
-  static final _accountNumber = RegExp(r'^\d{10}$');
-
   String? _selectedAccount;
   DateTimeRange? _range;
 
@@ -697,7 +695,7 @@ class _StatementRequestFormState extends ConsumerState<_StatementRequestForm> {
 
   List<CustomerBankAccount> _eligible(CustomerBankAccountsData? data) => [
     for (final account in data?.accounts ?? const <CustomerBankAccount>[])
-      if (_accountNumber.hasMatch(account.accountNumber) &&
+      if (isCoreAccountNumber(account.accountNumber) &&
           account.status != CoreAccountStatus.closed)
         account,
   ];

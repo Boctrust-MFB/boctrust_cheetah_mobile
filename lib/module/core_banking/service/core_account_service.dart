@@ -10,11 +10,10 @@ import '../model/bank_product_models.dart';
 import '../model/core_account_statement.dart';
 import '../model/core_account_summary.dart';
 import '../model/core_account_transactions.dart';
+import '../model/core_json.dart';
 import '../model/customer_bank_account_models.dart';
 
 const _coreUnavailable = 'Account services are not available right now.';
-
-final _accountNumber = RegExp(r'^\d{10}$');
 
 final coreAccountServiceProvider = Provider<CoreAccountService>(
   (ref) => CoreAccountService(ref.watch(coreApiServiceProvider)),
@@ -46,7 +45,7 @@ class CoreAccountService {
   ) async {
     final api = _api;
     if (api == null) return const NotifierState.blocked(_coreUnavailable);
-    if (!_accountNumber.hasMatch(accountNumber)) {
+    if (!isCoreAccountNumber(accountNumber)) {
       return const NotifierState.error('Account not found.');
     }
     return NotifierState.fromResponse(
@@ -66,7 +65,7 @@ class CoreAccountService {
   ) async {
     final api = _api;
     if (api == null) return const NotifierState.blocked(_coreUnavailable);
-    if (!_accountNumber.hasMatch(accountNumber)) {
+    if (!isCoreAccountNumber(accountNumber)) {
       return const NotifierState.error('Account not found.');
     }
     return NotifierState.fromResponse(
@@ -88,7 +87,7 @@ class CoreAccountService {
   }) async {
     final api = _api;
     if (api == null) return const NotifierState.blocked(_coreUnavailable);
-    if (!_accountNumber.hasMatch(accountNumber)) {
+    if (!isCoreAccountNumber(accountNumber)) {
       return const NotifierState.error('Account not found.');
     }
     final (:fromDate, :toDate) = range.window(today ?? DateTime.now());
@@ -116,7 +115,7 @@ class CoreAccountService {
   }) async {
     final api = _api;
     if (api == null) return const NotifierState.blocked(_coreUnavailable);
-    if (!_accountNumber.hasMatch(accountNumber)) {
+    if (!isCoreAccountNumber(accountNumber)) {
       return const NotifierState.error('Account not found.');
     }
     final rangeError = coreStatementRangeError(
@@ -196,7 +195,7 @@ class CoreAccountService {
     Map<String, Object?>? body,
     T Function(Object? json) parser,
   ) async {
-    if (!_accountNumber.hasMatch(accountNumber)) {
+    if (!isCoreAccountNumber(accountNumber)) {
       return FreezeNotFound<T>();
     }
     final api = _api;
