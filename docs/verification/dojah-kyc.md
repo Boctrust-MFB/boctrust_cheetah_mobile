@@ -604,6 +604,8 @@ No device session was run for this change.
 
 Not yet run:
 
-- Task 0
-- A1 Steps 2-3
-- B2 Steps 1-2
+- Confirm on a device which selfie options the SDK's "Verify with" dropdown offers, and that photo works and video crashes on a build still on the native SDK.
+- After the dashboard change: confirm the selfie widget offers no video option, and that a native-SDK build completes a photo-selfie capture without a crash.
+- On this build: complete a full BVN liveness capture, including the face step, in the Android WebView, and confirm the screen closes with an outcome.
+
+The WebView grants the page's microphone requests, but the Android app neither declares nor requests `RECORD_AUDIO`. A hosted flow that asks for audio (for example video KYC) would therefore fail on Android. Keeping the widget on the photo selfie avoids this, and the WebView capture check above should watch for a microphone prompt.

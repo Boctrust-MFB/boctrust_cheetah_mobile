@@ -161,7 +161,10 @@ class _DojahCaptureScreenState extends ConsumerState<DojahCaptureScreen> {
   }
 
   Widget _cameraRefused() => _message(
-    'Camera access is needed to photograph your document. Allow it for '
+    'Camera access is needed to ${switch (widget.operation) {
+      KycOperation.identity => 'take your selfie',
+      KycOperation.governmentId => 'photograph your document',
+    }}. Allow it for '
     'Boctrust in your device settings, then try again.',
     action: 'Close',
     onPressed: _cancel,
