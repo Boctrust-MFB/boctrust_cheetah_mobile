@@ -511,3 +511,99 @@ which no test drives (capture tests inject a fake browser). Only
 Authenticated staging on physical devices: both GETs loading before the form
 is usable, Retry recovery, the initiation's provider launching, and
 logout/login as another user reloading configuration.
+
+## Native video selfie crash — 2026-10-27
+
+### The crash
+
+A Pixel 7 Pro (`2B161FDH30033N`) crashed during BVN liveness in the native
+Dojah SDK:
+
+```
+IllegalArgumentException: Uri lacks 'file' scheme:
+  at androidx.core.net.UriKt.toFile(Uri.kt:43)
+  at com.dojah.kyc_sdk_kotlin.ui.main.fragment.datacollection.PreviewSelfieFragment.onViewCreated(PreviewSelfieFragment.kt:140)
+```
+
+A second crash followed about a second later:
+
+```
+lateinit property dojahContainer has not been initialized
+  in SplashActivity
+```
+
+That one is a side effect, not a separate bug. Android restarted the process
+and restored Dojah's activity without `DojahSdk` having been set up.
+
+### Cause
+
+Read from the `sdk-kotlin` v0.4.2 bytecode. The SDK has two selfie types:
+`VerificationType.Selfie` (photo, key `selfie`) and
+`VerificationType.SelfieVideo` ("Video KYC", key `selfie-video`/`video`). The
+BVN page (`GovDataFragment`) has a "Verify with" dropdown (`spinnerVerifyWith`)
+filled from the widget page's `config.verificationMethods`: one method is
+prefilled, more than one leaves the choice to the user. `EmptyFragment` also
+picks a type from `config.mode`.
+
+The photo path is safe: `FaceDetectionUtil.getSingleFrameImage` writes a cache
+file and returns `Uri.fromFile(...)`. The video path always fails on Android
+10+:
+
+1. `CameraUtil.recordVideo` records to
+   `MediaStore.Video.Media.INTERNAL_CONTENT_URI`. Third-party apps cannot
+   insert there, so the recording fails.
+2. On `VideoRecordEvent.Finalize` it passes `getOutputResults().getOutputUri()`
+   to the callback without checking `hasError()`. CameraX returns `Uri.EMPTY`
+   for a failed recording.
+3. `PreviewSelfieFragment` calls `selfieUri.toFile()`, which throws. Even a
+   successful recording would produce a `content://` URI, and `toFile()` throws
+   on that too.
+
+### Why it surfaced now
+
+The SDK bug was always there; it became reachable when the flow went down the
+video branch.
+
+- None of our Dojah code changed since `bcf0acf` (2026-10-02, "run BVN liveness
+  in the native Dojah SDK on Android") apart from the icon swap in `6acebdb`.
+- The SDK pin has been `v0.4.2` since `df72d2e` (2026-09-14).
+- No device run of native liveness is recorded after `bcf0acf`.
+- The staging selfie widget's `widget/pre-auth` response (`government-data`,
+  `bvn`, `bvnAdvance`, `selfie: true`, `version: 1`) carries neither
+  `verificationMethods` nor `mode`. The video choice therefore comes from the
+  fuller widget config, the user's pick in "Verify with", or both. A Dojah
+  dashboard change is the likely trigger, just as the Email step appeared on
+  2026-09-19 without an app change.
+
+### Fixes
+
+- **Android identity moved to the hosted flow** (commit `6d30c2c`, "fix(kyc):
+  run Android BVN liveness in the hosted Dojah flow").
+  `chooseDojahPlatformRoute` now returns `DojahPlatformRoute.webView` for
+  Android, so BVN liveness runs in the hosted page and never reaches the SDK's
+  video code. `androidNativeIdentity`, `DojahCaptureMode.nativeSdk` and
+  `_launchNative` are kept parked, so returning to the SDK is a one-line change
+  in `lib/module/kyc/service/dojah_platform_route.dart`. The route's test is
+  `test/dojah_platform_route_test.dart`.
+- **Dojah dashboard change (required, pending).** Restrict the selfie widget
+  behind `DOJAH_SELFIE_WIDGET_ID` to the photo selfie. This has not been made
+  yet; Kenechukwu is to make it. It also protects installed builds that still
+  run the native SDK, which the app change alone cannot reach. `.env.stage` and
+  `.env.prod` use the same widget ID, so the change applies to staging and
+  production together. Until it is made, the widget must be treated as offering
+  the video selfie to any native-SDK build.
+
+### Checks run
+
+- `flutter test test/dojah_platform_route_test.dart`: 3 tests passed.
+- `flutter analyze`: no issues.
+
+No device session was run for this change.
+
+### Pending device checks
+
+Not yet run:
+
+- Task 0
+- A1 Steps 2-3
+- B2 Steps 1-2
