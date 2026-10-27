@@ -5,23 +5,26 @@ import '../model/kyc_provider_models.dart';
 
 /// How this device presents Dojah capture.
 ///
-/// iOS never had the native plugin: it is registered for Android only, so
-/// iOS uses the hosted flow in an embedded browser for every operation.
+/// Both platforms use the hosted flow in an embedded browser for every
+/// operation. iOS never had the native plugin: it is registered for Android
+/// only.
 ///
-/// Android runs BVN liveness in the native SDK, whose camera-based liveness
-/// does not depend on the embedded browser's face model, and keeps the
-/// government-ID flow in the browser. `sdk-kotlin` v0.4.2 advances a
-/// persisted page index on every destination change without bounding it
-/// against the page list, so navigating back on the document pages makes
-/// `getCurrentPageName` return null and `GovDataViewModel.logIdOptionEvents`
-/// throw `No stepNumber` from its own coroutine, killing the host process.
-/// The BVN and selfie flow has no document pages, so only the document flow
-/// stays out of the SDK.
+/// Android left the native SDK, `sdk-kotlin` v0.4.2, for two crashes that kill
+/// the host process. On the document pages it advances a persisted page index
+/// without bounding it, so `GovDataViewModel.logIdOptionEvents` throws
+/// `No stepNumber`. On the video-selfie path `CameraUtil.recordVideo` records
+/// to `MediaStore.Video.Media.INTERNAL_CONTENT_URI`, which a third-party app
+/// cannot write, and ignores the failed `Finalize`, so
+/// `PreviewSelfieFragment` calls `toFile()` on an empty Uri.
+///
+/// `androidNativeIdentity` is kept, unused, for returning to the SDK once
+/// Dojah ships a fix. Until installed builds no longer run the native SDK, the
+/// Dojah selfie widget must offer only the photo selfie.
 enum DojahPlatformRoute {
   /// The hosted flow in an embedded browser for every operation.
   webView,
 
-  /// The native SDK for identity, the embedded browser for documents.
+  /// Parked: the native SDK for identity, the embedded browser for documents.
   androidNativeIdentity,
 
   unsupported,
@@ -36,8 +39,7 @@ DojahPlatformRoute chooseDojahPlatformRoute({
   required bool isIOS,
 }) {
   if (isWeb) return DojahPlatformRoute.unsupported;
-  if (isAndroid) return DojahPlatformRoute.androidNativeIdentity;
-  if (isIOS) return DojahPlatformRoute.webView;
+  if (isAndroid || isIOS) return DojahPlatformRoute.webView;
   return DojahPlatformRoute.unsupported;
 }
 

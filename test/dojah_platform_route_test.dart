@@ -10,18 +10,19 @@ void main() {
     );
   });
 
-  test('Android runs BVN liveness natively and documents in the browser', () {
-    // The native Android SDK (sdk-kotlin v0.4.2) throws "No stepNumber" from
-    // its own coroutine when the user navigates back on the document pages,
-    // which kills the host process, so only the document flow stays hosted.
+  test('Android uses the embedded browser for every operation', () {
+    // The native Android SDK (sdk-kotlin v0.4.2) crashes the app on its
+    // video-selfie path: the recording fails, then the preview calls toFile()
+    // on an empty Uri. Identity therefore runs in the hosted flow too.
     final route = chooseDojahPlatformRoute(
       isWeb: false,
       isAndroid: true,
       isIOS: false,
     );
+    expect(route, DojahPlatformRoute.webView);
     expect(
       dojahCaptureMode(route, KycOperation.identity),
-      DojahCaptureMode.nativeSdk,
+      DojahCaptureMode.webView,
     );
     expect(
       dojahCaptureMode(route, KycOperation.governmentId),
