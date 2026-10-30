@@ -519,7 +519,7 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
     switch (identity.status) {
       case ReconfirmationStatus.verified:
         await _proceedIfProven(
-          still._with(phase: still.phase, identity: identity),
+          still._with(phase: still.phase, identity: identity.withoutCapture()),
         );
         return null;
       case ReconfirmationStatus.comparing:
@@ -773,6 +773,7 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
   /// Drops everything, including a late reply, when the session ends.
   void clear() {
     _generation++;
+    _identityBusy = false;
     state = const CoreTransferAttemptState();
   }
 }
