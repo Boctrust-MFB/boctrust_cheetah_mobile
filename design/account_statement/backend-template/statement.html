@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BocTrust account statement</title>
+<!--
+  BocTrust account statement template (Mustache / Handlebars compatible).
+  See README.md for the data contract and rendering settings.
+-->
+<style>
+  @font-face { font-family: "Jakarta"; src: url("fonts/PlusJakartaSans-Regular.ttf"); font-weight: 400; }
+  @font-face { font-family: "Jakarta"; src: url("fonts/PlusJakartaSans-Medium.ttf"); font-weight: 500; }
+  @font-face { font-family: "Jakarta"; src: url("fonts/PlusJakartaSans-SemiBold.ttf"); font-weight: 600; }
+  @font-face { font-family: "Jakarta"; src: url("fonts/PlusJakartaSans-Bold.ttf"); font-weight: 700; }
+  @font-face { font-family: "Jakarta"; src: url("fonts/PlusJakartaSans-ExtraBold.ttf"); font-weight: 800; }
+  /* Figures font: FH Oscar trial build (FHOscarTest). Swap in the licensed
+     files before go-live; figures fall back to Plus Jakarta Sans if missing. */
+  @font-face { font-family: "Oscar"; src: url("fonts/FHOscarTest-Regular.otf"); font-weight: 400; }
+  @font-face { font-family: "Oscar"; src: url("fonts/FHOscarTest-SemiBold.otf"); font-weight: 600; }
+  @font-face { font-family: "Oscar"; src: url("fonts/FHOscarTest-Bold.otf"); font-weight: 700; }
+
+  :root {
+    --blue: #4F7EB4;
+    --blue-pale: #E6EDF6;
+    --navy: #1A2A3C;
+    --navy-2: #22364D;
+    --gold: #BF910C;
+    --gold-light: #E5C367;   /* gold on navy only */
+    --gold-strong: #8A6A12;  /* the only gold used as text on white */
+    --gold-pale: #F2E9CE;
+    --paper: #F6F4EE;
+    --surface: #FFFFFF;
+    --surface-muted: #FBFAF6;
+    --border: #E7E2D6;
+    --text-primary: #101924;
+    --text-main: #142B45;
+    --text-secondary: #333C47;
+    --text-tertiary: #5C636C;
+    --text-disabled: #A9B1BA;
+    --on-navy: #FFFFFF;
+    --on-navy-muted: #DCE5F0;
+    --success-text: #1E7F57;
+  }
+
+  /* Bottom margin leaves room for the renderer's page footer (README). */
+  @page { size: A4; margin: 14mm 16mm 20mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    background: var(--surface);
+    font-family: "Jakarta", sans-serif;
+    color: var(--text-secondary);
+    font-size: 9pt;
+    line-height: 1.45;
+  }
+  .fig { font-family: "Oscar", "Jakarta", sans-serif; font-variant-numeric: tabular-nums; }
+  .naira { font-family: "Jakarta", sans-serif; font-weight: 600; margin-right: .3mm; }
+
+  /* ---------- Header ---------- */
+  .header {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-top: 9mm;
+    padding-bottom: 6mm;
+    border-bottom: 1px solid var(--border);
+  }
+  /* Speed streaks from the cheetah mark. */
+  .header::before {
+    content: "";
+    position: absolute;
+    top: 0; right: 0;
+    width: 62mm; height: 4.5mm;
+    background: linear-gradient(90deg, transparent, var(--blue) 40%);
+    clip-path: polygon(14% 0, 100% 0, 100% 100%, 0 100%);
+  }
+  .header::after {
+    content: "";
+    position: absolute;
+    top: 5.2mm; right: 0;
+    width: 36mm; height: 1.3mm;
+    background: var(--gold-light);
+    clip-path: polygon(10% 0, 100% 0, 100% 100%, 0 100%);
+  }
+  .brand { display: flex; align-items: center; gap: 3.5mm; }
+  .brand img { width: 13mm; height: 13mm; border-radius: 3.2mm; display: block; }
+  .brand-name { font-size: 15pt; font-weight: 800; color: var(--text-main); letter-spacing: -.01em; line-height: 1.1; }
+  .brand-name span { color: var(--blue); }
+  .brand-sub { font-size: 7.5pt; font-weight: 500; color: var(--text-tertiary); letter-spacing: .02em; }
+  .doc-title { text-align: right; }
+  .doc-title h1 { font-size: 17pt; font-weight: 700; color: var(--text-main); letter-spacing: -.015em; line-height: 1.1; }
+  .doc-title p { margin-top: 1.2mm; font-size: 8pt; color: var(--text-tertiary); }
+
+  /* ---------- Holder + account details ---------- */
+  .parties {
+    display: grid;
+    grid-template-columns: 1fr 1.25fr;
+    gap: 8mm;
+    margin-top: 7mm;
+    break-inside: avoid;
+  }
+  .label {
+    font-size: 6.8pt;
+    font-weight: 600;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  .holder .name { margin-top: 1.5mm; font-size: 11pt; font-weight: 700; color: var(--text-primary); }
+  .holder address { margin-top: 1mm; font-style: normal; color: var(--text-secondary); }
+  .details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    background: var(--paper);
+    border-radius: 3mm;
+    padding: 4mm 5mm;
+    row-gap: 3mm;
+    column-gap: 6mm;
+  }
+  .details dd { margin-top: .6mm; font-weight: 600; color: var(--text-primary); font-size: 9pt; }
+  .details dd.number { font-size: 10pt; letter-spacing: .02em; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 1.5mm;
+    padding: .4mm 2.4mm .4mm 1.6mm;
+    border-radius: 99px;
+    background: var(--gold-pale);
+    color: var(--gold-strong);
+    font-size: 7.6pt; font-weight: 700;
+  }
+  .chip::before { content: ""; width: 1.8mm; height: 1.8mm; border-radius: 50%; background: var(--gold); }
+
+  /* ---------- Summary: the navy wallet card ---------- */
+  .summary {
+    position: relative;
+    margin-top: 7mm;
+    border-radius: 4mm;
+    background: var(--navy);
+    color: var(--on-navy);
+    overflow: hidden;
+    padding: 5.5mm 6mm;
+    break-inside: avoid;
+  }
+  .summary .streaks { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .summary-grid { position: relative; display: grid; grid-template-columns: 1fr 1fr 1fr 1.3fr; }
+  .summary-grid > div { min-width: 0; padding: 0 4mm; border-left: 1px solid rgba(220, 229, 240, .16); }
+  .summary-grid > div:first-child { padding-left: 0; border-left: 0; }
+  .summary .k { font-size: 7pt; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--on-navy-muted); opacity: .85; }
+  .summary .v { margin-top: 1.6mm; font-size: 11pt; font-weight: 600; white-space: nowrap; }
+  .summary .n { margin-top: .6mm; font-size: 7.5pt; color: var(--on-navy-muted); opacity: .8; }
+  .summary .closing .k { color: var(--gold-light); opacity: 1; }
+  .summary .closing .v { font-size: 14pt; font-weight: 700; letter-spacing: -.01em; }
+
+  /* ---------- Transactions ---------- */
+  .section-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-top: 8mm; margin-bottom: 2.5mm;
+    break-after: avoid;
+  }
+  .section-head h2 { font-size: 11pt; font-weight: 700; color: var(--text-main); }
+  .section-head span { font-size: 7.8pt; color: var(--text-tertiary); }
+
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  thead { display: table-header-group; } /* repeats on every page */
+  thead th {
+    font-size: 6.8pt; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--text-tertiary); text-align: left;
+    padding: 2.4mm 2.5mm;
+    background: var(--blue-pale);
+  }
+  th.num, td.num { text-align: right; }
+  col.c-date { width: 19mm; }
+  col.c-amt { width: 25mm; }
+  col.c-bal { width: 28mm; }
+
+  tr { break-inside: avoid; }
+  tbody td {
+    padding: 2.3mm 2.5mm;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tbody tr:nth-child(even) td { background: var(--surface-muted); }
+  td.date { color: var(--text-secondary); font-size: 8.4pt; white-space: nowrap; }
+  td.date small { display: block; color: var(--text-tertiary); font-size: 7pt; }
+  .desc { font-weight: 600; color: var(--text-primary); font-size: 8.6pt; overflow-wrap: anywhere; }
+  .ref { margin-top: .4mm; font-size: 7pt; color: var(--text-tertiary); overflow-wrap: anywhere; }
+  td.num { font-size: 8.8pt; white-space: nowrap; }
+  td.out { color: var(--text-primary); }
+  td.in { color: var(--success-text); font-weight: 600; }
+  td.bal { color: var(--text-main); font-weight: 600; }
+  td.empty { color: var(--text-disabled); }
+  td.none { text-align: center; color: var(--text-tertiary); padding: 8mm 0; }
+
+  tr.marker td {
+    background: var(--paper) !important;
+    font-weight: 600; color: var(--text-main);
+    border-bottom: 0;
+  }
+
+  /* ---------- Closing note + bank details ---------- */
+  .note {
+    margin-top: 7mm;
+    padding: 4mm 5mm;
+    border: 1px solid var(--border);
+    border-left: 1mm solid var(--gold);
+    border-radius: 2.5mm;
+    background: var(--surface-muted);
+    font-size: 7.8pt;
+    break-inside: avoid;
+  }
+  .note strong { color: var(--text-primary); }
+  .bank {
+    margin-top: 5mm;
+    padding-top: 4mm;
+    border-top: 1px solid var(--border);
+    font-size: 7pt;
+    color: var(--text-tertiary);
+    break-inside: avoid;
+  }
+  .bank b { color: var(--text-main); font-weight: 700; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="brand">
+    <img src="logo.svg" alt="BocTrust">
+    <div>
+      <div class="brand-name">Boc<span>Trust</span></div>
+      <div class="brand-sub">{{bank.legalName}}</div>
+    </div>
+  </div>
+  <div class="doc-title">
+    <h1>Account statement</h1>
+    <p class="fig">{{statement.periodLabel}}</p>
+  </div>
+</header>
+
+<div class="parties">
+  <div class="holder">
+    <div class="label">Account holder</div>
+    <div class="name">{{account.holderName}}</div>
+    <address>{{#account.addressLines}}{{.}}<br>{{/account.addressLines}}</address>
+  </div>
+  <dl class="details">
+    <div><dt class="label">Account number</dt><dd class="fig number">{{account.number}}</dd></div>
+    <div><dt class="label">Account type</dt><dd><span class="chip">{{account.productName}}</span></dd></div>
+    <div><dt class="label">Currency</dt><dd>{{account.currencyLabel}}</dd></div>
+    <div><dt class="label">Generated</dt><dd class="fig">{{statement.generatedAt}}</dd></div>
+  </dl>
+</div>
+
+<div class="summary">
+  <svg class="streaks" viewBox="0 0 600 90" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M330 18 L600 6 L600 14 L338 26 Z" fill="#22364D"/>
+    <path d="M380 40 L600 30 L600 40 L388 48 Z" fill="#22364D"/>
+    <path d="M430 62 L600 54 L600 62 L438 70 Z" fill="#22364D"/>
+    <path d="M470 82 L600 76 L600 82 L478 88 Z" fill="#22364D"/>
+  </svg>
+  <div class="summary-grid">
+    <div>
+      <div class="k">Opening balance</div>
+      <div class="v fig"><span class="naira">₦</span>{{summary.openingBalance}}</div>
+      <div class="n fig">{{summary.openingDate}}</div>
+    </div>
+    <div>
+      <div class="k">Money in</div>
+      <div class="v fig"><span class="naira">₦</span>{{summary.moneyIn}}</div>
+      <div class="n">{{summary.creditCountLabel}}</div>
+    </div>
+    <div>
+      <div class="k">Money out</div>
+      <div class="v fig"><span class="naira">₦</span>{{summary.moneyOut}}</div>
+      <div class="n">{{summary.debitCountLabel}}</div>
+    </div>
+    <div class="closing">
+      <div class="k">Closing balance</div>
+      <div class="v fig"><span class="naira">₦</span>{{summary.closingBalance}}</div>
+      <div class="n fig">{{summary.closingDate}}</div>
+    </div>
+  </div>
+</div>
+
+<div class="section-head">
+  <h2>Transactions</h2>
+  <span>Oldest first · amounts in NGN</span>
+</div>
+
+<table>
+  <colgroup><col class="c-date"><col><col class="c-amt"><col class="c-amt"><col class="c-bal"></colgroup>
+  <thead>
+    <tr><th>Date</th><th>Description</th><th class="num">Money out</th><th class="num">Money in</th><th class="num">Balance</th></tr>
+  </thead>
+  <tbody>
+    <tr class="marker"><td class="date fig">{{summary.openingDateShort}}</td><td>Opening balance</td><td></td><td></td><td class="num fig">{{summary.openingBalance}}</td></tr>
+    {{#transactions}}
+    <tr>
+      <td class="date fig">{{date}}<small>{{time}}</small></td>
+      <td>
+        <div class="desc">{{description}}</div>
+        <div class="ref">{{#detail}}{{.}} · {{/detail}}Ref <span class="fig">{{reference}}</span></div>
+      </td>
+      {{#moneyOut}}<td class="num fig out">−{{.}}</td>{{/moneyOut}}{{^moneyOut}}<td class="num empty">—</td>{{/moneyOut}}
+      {{#moneyIn}}<td class="num fig in">+{{.}}</td>{{/moneyIn}}{{^moneyIn}}<td class="num empty">—</td>{{/moneyIn}}
+      <td class="num fig bal">{{balance}}</td>
+    </tr>
+    {{/transactions}}
+    {{^transactions}}
+    <tr><td class="none" colspan="5">No transactions in this period.</td></tr>
+    {{/transactions}}
+    <tr class="marker"><td class="date fig">{{summary.closingDateShort}}</td><td>Closing balance</td><td class="num fig">{{summary.moneyOut}}</td><td class="num fig">{{summary.moneyIn}}</td><td class="num fig">{{summary.closingBalance}}</td></tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <strong>About this statement.</strong>
+  This statement was generated electronically and needs no signature.
+  Check every entry and report anything you do not recognise within
+  {{bank.disputeWindowDays}} days through the BocTrust app or {{bank.supportEmail}}.
+  Times are West Africa Time (WAT). Each reference matches the receipt in your app.
+</div>
+
+<div class="bank">
+  <b>{{bank.legalName}}</b> · {{bank.address}} · {{bank.supportEmail}} · {{bank.phone}}<br>
+  {{bank.regulatoryNotice}}
+</div>
+
+</body>
+</html>

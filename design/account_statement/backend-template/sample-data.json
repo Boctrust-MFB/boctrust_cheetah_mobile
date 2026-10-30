@@ -1,0 +1,216 @@
+{
+  "statement": {
+    "periodLabel": "1 Sep 2026 – 30 Sep 2026",
+    "generatedAt": "1 Oct 2026, 08:14"
+  },
+  "account": {
+    "holderName": "Adaeze N. Okafor",
+    "addressLines": [
+      "14 Admiralty Way, Lekki Phase 1",
+      "Lagos, Nigeria"
+    ],
+    "number": "0123 456 789",
+    "productName": "Boc Flex Savings",
+    "currencyLabel": "Nigerian Naira (NGN)"
+  },
+  "summary": {
+    "openingBalance": "184,250.00",
+    "openingDate": "1 Sep 2026",
+    "openingDateShort": "01 Sep",
+    "moneyIn": "612,400.00",
+    "creditCountLabel": "7 credits",
+    "moneyOut": "431,875.50",
+    "debitCountLabel": "13 debits",
+    "closingBalance": "364,774.50",
+    "closingDate": "30 Sep 2026",
+    "closingDateShort": "30 Sep"
+  },
+  "transactions": [
+    {
+      "date": "01 Sep",
+      "time": "09:12",
+      "description": "Salary — Kestrel Logistics Ltd",
+      "detail": "Inward transfer",
+      "reference": "BT2609010912A",
+      "moneyIn": "350,000.00",
+      "balance": "534,250.00"
+    },
+    {
+      "date": "02 Sep",
+      "time": "18:40",
+      "description": "Transfer to Chinedu Eze",
+      "detail": "GTBank",
+      "reference": "BT2609021840C",
+      "moneyOut": "45,000.00",
+      "balance": "489,250.00"
+    },
+    {
+      "date": "02 Sep",
+      "time": "18:40",
+      "description": "Transfer fee",
+      "reference": "BT2609021840C",
+      "moneyOut": "26.88",
+      "balance": "489,223.12"
+    },
+    {
+      "date": "04 Sep",
+      "time": "07:55",
+      "description": "Airtime — MTN",
+      "detail": "0803 *** 4471",
+      "reference": "BT2609040755B",
+      "moneyOut": "2,000.00",
+      "balance": "487,223.12"
+    },
+    {
+      "date": "05 Sep",
+      "time": "12:03",
+      "description": "Scan to Pay — Shoprite Lekki",
+      "detail": "Merchant payment",
+      "reference": "BT2609051203Q",
+      "moneyOut": "38,640.00",
+      "balance": "448,583.12"
+    },
+    {
+      "date": "07 Sep",
+      "time": "10:21",
+      "description": "Move to Boc SmartSave",
+      "detail": "Savings goal “Rent 2027”",
+      "reference": "BT2609071021S",
+      "moneyOut": "100,000.00",
+      "balance": "348,583.12"
+    },
+    {
+      "date": "09 Sep",
+      "time": "16:47",
+      "description": "Transfer from Ifeoma Okafor",
+      "detail": "Access Bank",
+      "reference": "BT2609091647A",
+      "moneyIn": "25,000.00",
+      "balance": "373,583.12"
+    },
+    {
+      "date": "11 Sep",
+      "time": "20:15",
+      "description": "Electricity — Eko DisCo",
+      "detail": "Meter 4510 2287 931",
+      "reference": "BT2609112015B",
+      "moneyOut": "20,000.00",
+      "balance": "353,583.12"
+    },
+    {
+      "date": "13 Sep",
+      "time": "14:30",
+      "description": "DSTV — Compact",
+      "detail": "Smartcard 7023 4410 88",
+      "reference": "BT2609131430B",
+      "moneyOut": "15,700.00",
+      "balance": "337,883.12"
+    },
+    {
+      "date": "15 Sep",
+      "time": "09:02",
+      "description": "Transfer to Tunde Bakare",
+      "detail": "BocTrust",
+      "reference": "BT2609150902C",
+      "moneyOut": "60,000.00",
+      "balance": "277,883.12"
+    },
+    {
+      "date": "17 Sep",
+      "time": "11:44",
+      "description": "Transfer from Kelechi Nwosu",
+      "detail": "Zenith Bank",
+      "reference": "BT2609171144A",
+      "moneyIn": "18,500.00",
+      "balance": "296,383.12"
+    },
+    {
+      "date": "19 Sep",
+      "time": "19:26",
+      "description": "Scan to Pay — Chicken Republic",
+      "detail": "Merchant payment",
+      "reference": "BT2609191926Q",
+      "moneyOut": "6,850.00",
+      "balance": "289,533.12"
+    },
+    {
+      "date": "20 Sep",
+      "time": "08:10",
+      "description": "Data — Airtel 10GB",
+      "detail": "0802 *** 1190",
+      "reference": "BT2609200810B",
+      "moneyOut": "5,000.00",
+      "balance": "284,533.12"
+    },
+    {
+      "date": "22 Sep",
+      "time": "13:05",
+      "description": "Boc Fixed Deposit matured",
+      "detail": "Principal + interest",
+      "reference": "BT2609221305F",
+      "moneyIn": "154,800.00",
+      "balance": "439,333.12"
+    },
+    {
+      "date": "23 Sep",
+      "time": "17:38",
+      "description": "Transfer to Amaka Obi",
+      "detail": "UBA",
+      "reference": "BT2609231738C",
+      "moneyOut": "120,000.00",
+      "balance": "319,333.12"
+    },
+    {
+      "date": "23 Sep",
+      "time": "17:38",
+      "description": "Transfer fee",
+      "reference": "BT2609231738C",
+      "moneyOut": "53.75",
+      "balance": "319,279.37"
+    },
+    {
+      "date": "25 Sep",
+      "time": "10:00",
+      "description": "Transfer from Ngozi Adeyemi",
+      "detail": "First Bank",
+      "reference": "BT2609251000A",
+      "moneyIn": "40,000.00",
+      "balance": "359,279.37"
+    },
+    {
+      "date": "27 Sep",
+      "time": "15:22",
+      "description": "Scan to Pay — Filmhouse IMAX",
+      "detail": "Merchant payment",
+      "reference": "BT2609271522Q",
+      "moneyOut": "18,604.87",
+      "balance": "340,674.50"
+    },
+    {
+      "date": "28 Sep",
+      "time": "09:30",
+      "description": "Refund — Eko DisCo",
+      "detail": "Reversal of BT2609112015B",
+      "reference": "BT2609280930R",
+      "moneyIn": "20,000.00",
+      "balance": "360,674.50"
+    },
+    {
+      "date": "30 Sep",
+      "time": "23:59",
+      "description": "Interest — Boc Flex Savings",
+      "detail": "September interest, net of tax",
+      "reference": "BT2609302359I",
+      "moneyIn": "4,100.00",
+      "balance": "364,774.50"
+    }
+  ],
+  "bank": {
+    "legalName": "[Boctrust Microfinance Bank Limited]",
+    "address": "[Head office address]",
+    "supportEmail": "[support@email]",
+    "phone": "[phone]",
+    "regulatoryNotice": "[Licensing and deposit-insurance statement, as approved by Compliance.]",
+    "disputeWindowDays": "[N]"
+  }
+}
