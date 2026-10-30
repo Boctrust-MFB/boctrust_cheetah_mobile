@@ -494,7 +494,7 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
           .read(transactionReconfirmationServiceProvider)
           .initiate(initiation.reference, consentedAt: consentedAt);
     } finally {
-      _identityBusy = false;
+      if (generation == _generation) _identityBusy = false;
     }
     if (!ref.mounted || generation != _generation) return null;
     final still = _open(id, CoreTransferPhase.awaitingIdentity);
@@ -583,7 +583,9 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
       if (still == null) return;
       final next = result.data;
       if (next == null) {
-        if (result.statusCode == 404) {
+        final code = result.statusCode;
+        // A reply we cannot read ends the attempt; other errors may pass.
+        if (code == 404 || (code != null && code >= 200 && code < 300)) {
           _settle(still, CoreRejection.identityFailed);
         }
         return;
@@ -602,7 +604,23 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
       }
       _set(current: updated);
     } finally {
-      _identityBusy = false;
+      if (generation == _generation) _identityBusy = false;
+    }
+  }
+
+  /// Ends an identity step whose Core initiation or challenge has already
+  /// expired, so the customer is never asked for consent on a dead transfer.
+  void expireIdentityIfDue(int id) {
+    final current =
+        _open(id, CoreTransferPhase.awaitingIdentity) ??
+        _open(id, CoreTransferPhase.checkingIdentity);
+    final initiation = current?.initiation;
+    if (current == null || initiation == null) return;
+    final now = DateTime.now();
+    final expiresAt = current.identity?.expiresAt;
+    if (initiation.isExpiredAt(now) ||
+        (expiresAt != null && !now.toUtc().isBefore(expiresAt))) {
+      _settle(current, CoreRejection.initiationExpired);
     }
   }
 

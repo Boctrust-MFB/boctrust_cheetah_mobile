@@ -132,7 +132,7 @@ enum CoreRejection {
     "This transfer needs an identity check the app can't do yet.",
   ),
   identityNotConfirmed(
-    "This transfer couldn't be confirmed. It may have expired. Please start it again.",
+    "This transfer couldn't be confirmed. It may have expired or your account may be restricted. Please start it again.",
   ),
 
   /// Boc Flex is frozen or its status could not be confirmed; nothing was

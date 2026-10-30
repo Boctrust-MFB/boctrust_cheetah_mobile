@@ -48,6 +48,13 @@ class _TransferIdentityPanelState extends ConsumerState<TransferIdentityPanel> {
   @override
   void initState() {
     super.initState();
+    if (!_checking) {
+      final id = widget.attempt.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(coreTransferAttemptProvider.notifier).expireIdentityIfDue(id);
+      });
+    }
     if (_checking) {
       // Re-entry re-reads the verdict at once. After the frame, since a
       // refresh may settle the attempt synchronously.
@@ -123,8 +130,8 @@ class _TransferIdentityPanelState extends ConsumerState<TransferIdentityPanel> {
     final notifier = ref.read(coreTransferAttemptProvider.notifier);
     final id = widget.attempt.id;
     final widgetId = _transactionWidgetId().trim();
+    final messenger = ScaffoldMessenger.of(context);
     if (widgetId.isEmpty) {
-      final messenger = ScaffoldMessenger.of(context);
       notifier.cancelReview(id);
       messenger.showSnackBar(
         const SnackBar(
@@ -155,11 +162,22 @@ class _TransferIdentityPanelState extends ConsumerState<TransferIdentityPanel> {
           ),
         ),
       );
-      if (outcome == KycCaptureOutcome.submitted) {
+      // Dojah's WebView reports unknown when it redirects to its
+      // confirmation page before posting success, so both count as
+      // captured. Only the server's verdict approves the transfer.
+      if (outcome == KycCaptureOutcome.submitted ||
+          outcome == KycCaptureOutcome.unknown) {
         notifier.identityCaptured(id);
         await notifier.refreshIdentity(id);
       } else {
         notifier.cancelReview(id);
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              "Identity check wasn't completed, so this transfer was not sent.",
+            ),
+          ),
+        );
       }
     } finally {
       _setBusy(false);
