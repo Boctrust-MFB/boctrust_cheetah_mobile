@@ -66,6 +66,8 @@ class CoreTransferInitiation extends Equatable {
 
   bool get needsOtp => checks.contains(CoreTransferCheck.otp);
 
+  bool get requiresLiveness => checks.contains(CoreTransferCheck.liveness);
+
   /// Whether this app can satisfy every check; liveness is not supported.
   bool get supported => !checks.contains(CoreTransferCheck.liveness);
 

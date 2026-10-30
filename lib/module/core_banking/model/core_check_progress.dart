@@ -72,7 +72,8 @@ bool coreCheckProgressContradicts({
   required CoreCheckProgress? progress,
 }) {
   final pending = progress?.pending ?? const <CoreTransferCheck>{};
-  return pending.contains(CoreTransferCheck.liveness) ||
+  return (pending.contains(CoreTransferCheck.liveness) &&
+          !initiation.requiresLiveness) ||
       pending.contains(step) ||
       (step == CoreTransferCheck.otp &&
           pending.contains(CoreTransferCheck.pin)) ||

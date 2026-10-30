@@ -121,8 +121,18 @@ enum CoreRejection {
   checksInconsistent("We couldn't confirm this transfer's security checks."),
   checkInterrupted("We couldn't complete the security check."),
   initiationExpired('This transfer timed out before it was confirmed.'),
-  checksUnsupported(
-    "This transfer needs a check the app can't do yet. Try a smaller amount.",
+  checksUnsupported("This transfer needs a check the app can't do yet."),
+  identityFailed(
+    "We couldn't confirm your identity, so this transfer was not sent.",
+  ),
+  identityUnavailable(
+    "The identity check isn't available right now. Please try again later.",
+  ),
+  identityProviderUnsupported(
+    "This transfer needs an identity check the app can't do yet.",
+  ),
+  identityNotConfirmed(
+    "This transfer couldn't be confirmed. It may have expired. Please start it again.",
   ),
 
   /// Boc Flex is frozen or its status could not be confirmed; nothing was
