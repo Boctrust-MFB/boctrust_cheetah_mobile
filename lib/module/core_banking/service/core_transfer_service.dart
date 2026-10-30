@@ -75,10 +75,11 @@ class CoreTransferService {
     );
   }
 
-  /// Whether a check or finalize for [initiation] may be sent at all: a
-  /// liveness check or an expired initiation is refused locally.
+  /// Whether a check or finalize for [initiation] may be sent at all: an
+  /// expired initiation is refused locally. A liveness transfer's identity
+  /// gate is enforced by the attempt before finalize is called.
   static bool _sendable(CoreTransferInitiation initiation) =>
-      initiation.supported && !initiation.isExpiredAt(DateTime.now());
+      !initiation.isExpiredAt(DateTime.now());
 
   Future<NotifierState<CoreCheckProgress>> _check(
     String path, {

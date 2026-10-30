@@ -216,7 +216,7 @@ void main() {
     );
   });
 
-  test('a liveness or expired initiation is never sent', () async {
+  test('an expired initiation is never sent', () async {
     final core = _Core({});
     final service = _service(core);
     final expired = CoreTransferInitiation(
@@ -225,17 +225,11 @@ void main() {
       expiresAt: DateTime.utc(2020),
     );
 
-    final liveness = await service.verifyTransferPin(
-      CoreTransferKind.intrabank,
-      _initiation(['pin', 'liveness']),
-      '0007',
-    );
     final late = await service.finalizeTransfer(
       CoreTransferKind.intrabank,
       expired,
     );
 
-    expect(liveness.status, ServiceStatus.blocked);
     expect(late.status, ServiceStatus.blocked);
     expect(core.requests, isEmpty);
   });

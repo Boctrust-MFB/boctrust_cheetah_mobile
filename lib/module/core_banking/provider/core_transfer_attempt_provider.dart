@@ -10,7 +10,9 @@ import '../model/core_transfer_initiation.dart';
 import '../model/core_transfer_requery_models.dart';
 import '../model/interbank_models.dart';
 import '../model/intrabank_models.dart';
+import '../model/transaction_reconfirmation.dart';
 import '../service/core_transfer_service.dart';
+import '../service/transaction_reconfirmation_service.dart';
 import 'core_account_providers.dart';
 import 'core_account_activity_providers.dart';
 import 'flex_source_check.dart';
@@ -26,6 +28,12 @@ enum CoreTransferPhase {
   /// The PIN passed and Core sent an OTP; the OTP sheet is open.
   awaitingOtp,
   verifyingOtp,
+
+  /// PIN/OTP passed and Core asked for liveness: consent and capture next.
+  awaitingIdentity,
+
+  /// Capture done or resumed; waiting for User Service to say verified.
+  checkingIdentity,
 
   /// Every required check passed; finalize may be sent once.
   readyToFinalize,
@@ -73,6 +81,7 @@ class CoreTransferAttempt extends Equatable {
     this.live,
     this.checking = false,
     this.checkError,
+    this.identity,
   });
 
   final int id;
@@ -94,6 +103,10 @@ class CoreTransferAttempt extends Equatable {
 
   /// Why the last check could not confirm a status, shown beside the result.
   final String? checkError;
+
+  /// The identity reconfirmation for a liveness transfer. Only a verified
+  /// record bound to this initiation's reference lets finalize be sent.
+  final TransactionReconfirmation? identity;
 
   CoreTransferKind get kind => draft is InterbankTransferDraft
       ? CoreTransferKind.interbank
@@ -121,12 +134,14 @@ class CoreTransferAttempt extends Equatable {
     required CoreTransferPhase phase,
     CoreTransferInitiation? initiation,
     CoreSubmissionOutcome? outcome,
+    TransactionReconfirmation? identity,
   }) => CoreTransferAttempt(
     id: id,
     draft: draft,
     phase: phase,
     initiation: initiation ?? this.initiation,
     outcome: outcome,
+    identity: identity ?? this.identity,
   );
 
   CoreTransferAttempt _checked({
@@ -142,6 +157,7 @@ class CoreTransferAttempt extends Equatable {
     live: live,
     checking: checking,
     checkError: checkError,
+    identity: identity,
   );
 
   /// This attempt with [status] as its live result.
@@ -158,6 +174,7 @@ class CoreTransferAttempt extends Equatable {
     live,
     checking,
     checkError,
+    identity,
   ];
 }
 
@@ -193,12 +210,13 @@ final coreTransferAttemptProvider =
     );
 
 /// Owns every BOCTRUST and interbank transfer for the signed-in customer:
-/// initiate, verify the PIN, verify the OTP when Core sends one, finalize
-/// once, then track.
+/// initiate, verify the PIN, verify the OTP when Core sends one, reconfirm
+/// identity when Core asks for liveness, finalize once, then track.
 ///
 /// Core offers no idempotency key, so finalize is sent at most once. The PIN
 /// and OTP pass straight through [verifyPin] and [verifyOtp] and are never
-/// kept; finalize carries no credential.
+/// kept; finalize carries no credential. A liveness transfer finalizes only
+/// with a verified reconfirmation bound to its reference.
 class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
   int _nextId = 0;
 
@@ -320,12 +338,6 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
         _ => CoreRejection.initiationFailed,
       });
     }
-    if (!initiation.supported) {
-      return _settle(
-        current._with(phase: current.phase, initiation: initiation),
-        CoreRejection.checksUnsupported,
-      );
-    }
     _set(
       current: current._with(
         phase: CoreTransferPhase.awaitingPin,
@@ -335,8 +347,9 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
   }
 
   /// Verifies the PIN. When the initiation needs an OTP, Core sends it and
-  /// the attempt waits for it; otherwise it is ready to finalize. The PIN
-  /// passes straight through and is never kept.
+  /// the attempt waits for it; then, when Core asked for liveness, it waits
+  /// for an identity reconfirmation; otherwise it is ready to finalize. The
+  /// PIN passes straight through and is never kept.
   Future<CheckStep> verifyPin(int id, String pin) => _verify(
     id,
     CoreTransferCheck.pin,
@@ -368,10 +381,6 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
     final current = _open(id, waiting);
     final initiation = current?.initiation;
     if (current == null || initiation == null) return const CheckStopped();
-    if (!initiation.supported) {
-      _settle(current, CoreRejection.checksUnsupported);
-      return const CheckStopped();
-    }
     if (initiation.isExpiredAt(DateTime.now())) {
       _settle(current, CoreRejection.initiationExpired);
       return const CheckStopped();
@@ -403,6 +412,8 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
         current: current._with(
           phase: step == CoreTransferCheck.pin && initiation.needsOtp
               ? CoreTransferPhase.awaitingOtp
+              : initiation.requiresLiveness
+              ? CoreTransferPhase.awaitingIdentity
               : CoreTransferPhase.readyToFinalize,
         ),
       );
@@ -458,8 +469,162 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
     }
   }
 
+  bool _identityBusy = false;
+
+  /// Starts the identity reconfirmation for a liveness transfer, after the
+  /// customer consented at [consentedAt]. Returns the pending Dojah challenge
+  /// to capture, or null when there is nothing to capture: the attempt then
+  /// moved on, settled, or was replaced. No money moves here.
+  Future<TransactionReconfirmation?> startIdentity(
+    int id, {
+    required DateTime consentedAt,
+  }) async {
+    final current = _open(id, CoreTransferPhase.awaitingIdentity);
+    final initiation = current?.initiation;
+    if (current == null || initiation == null || _identityBusy) return null;
+    if (initiation.isExpiredAt(DateTime.now())) {
+      _settle(current, CoreRejection.initiationExpired);
+      return null;
+    }
+    final generation = _generation;
+    _identityBusy = true;
+    final NotifierState<TransactionReconfirmation> result;
+    try {
+      result = await ref
+          .read(transactionReconfirmationServiceProvider)
+          .initiate(initiation.reference, consentedAt: consentedAt);
+    } finally {
+      _identityBusy = false;
+    }
+    if (!ref.mounted || generation != _generation) return null;
+    final still = _open(id, CoreTransferPhase.awaitingIdentity);
+    if (still == null) return null;
+    final identity = result.data;
+    if (identity == null) {
+      _settle(still, switch (result.statusCode) {
+        429 || 502 => CoreRejection.identityUnavailable,
+        _ => CoreRejection.identityFailed,
+      });
+      return null;
+    }
+    if (identity.withdrawalReference != initiation.reference ||
+        identity.isTerminalFailure) {
+      _settle(still, CoreRejection.identityFailed);
+      return null;
+    }
+    if (identity.provider == ReconfirmationProvider.smileId) {
+      _settle(still, CoreRejection.identityProviderUnsupported);
+      return null;
+    }
+    switch (identity.status) {
+      case ReconfirmationStatus.verified:
+        await _proceedIfProven(
+          still._with(phase: still.phase, identity: identity),
+        );
+        return null;
+      case ReconfirmationStatus.comparing:
+        _set(
+          current: still._with(
+            phase: CoreTransferPhase.checkingIdentity,
+            identity: identity.withoutCapture(),
+          ),
+        );
+        return null;
+      case ReconfirmationStatus.pending
+          when identity.dojahReference?.isNotEmpty ?? false:
+        _set(
+          current: still._with(phase: still.phase, identity: identity),
+        );
+        return identity;
+      case _:
+        // Pending with nothing to capture can never be verified.
+        _settle(still, CoreRejection.identityFailed);
+        return null;
+    }
+  }
+
+  /// The customer finished the capture: keep the record without its nonce
+  /// and wait for the server's verdict. A cancelled or failed capture calls
+  /// [cancelReview] instead; no money moved.
+  void identityCaptured(int id) {
+    final current = _open(id, CoreTransferPhase.awaitingIdentity);
+    final identity = current?.identity;
+    if (current == null || identity == null) return;
+    _set(
+      current: current._with(
+        phase: CoreTransferPhase.checkingIdentity,
+        identity: identity.withoutCapture(),
+      ),
+    );
+  }
+
+  /// Asks User Service for the reconfirmation's verdict; one request at a
+  /// time. A verified record bound to this transfer finalizes it; an error
+  /// keeps the phase so the customer can check again.
+  Future<void> refreshIdentity(int id) async {
+    if (_identityBusy) return;
+    final current = _open(id, CoreTransferPhase.checkingIdentity);
+    final initiation = current?.initiation;
+    final identity = current?.identity;
+    if (current == null || initiation == null || identity == null) return;
+    final now = DateTime.now();
+    if (initiation.isExpiredAt(now) ||
+        !now.toUtc().isBefore(identity.expiresAt)) {
+      return _settle(current, CoreRejection.initiationExpired);
+    }
+    final generation = _generation;
+    _identityBusy = true;
+    try {
+      final result = await ref
+          .read(transactionReconfirmationServiceProvider)
+          .status(identity.verificationId);
+      if (!ref.mounted || generation != _generation) return;
+      final still = _open(id, CoreTransferPhase.checkingIdentity);
+      if (still == null) return;
+      final next = result.data;
+      if (next == null) {
+        if (result.statusCode == 404) {
+          _settle(still, CoreRejection.identityFailed);
+        }
+        return;
+      }
+      if (next.verificationId != identity.verificationId ||
+          next.withdrawalReference != initiation.reference ||
+          next.isTerminalFailure) {
+        return _settle(still, CoreRejection.identityFailed);
+      }
+      final updated = still._with(
+        phase: still.phase,
+        identity: next.withoutCapture(),
+      );
+      if (next.status == ReconfirmationStatus.verified) {
+        return await _proceedIfProven(updated);
+      }
+      _set(current: updated);
+    } finally {
+      _identityBusy = false;
+    }
+  }
+
+  /// Finalizes [attempt] only when its identity proves this transfer now;
+  /// otherwise settles it. [attempt] carries the record just received.
+  Future<void> _proceedIfProven(CoreTransferAttempt attempt) async {
+    final initiation = attempt.initiation;
+    final identity = attempt.identity;
+    final now = DateTime.now();
+    if (initiation == null ||
+        identity == null ||
+        !identity.provesTransfer(initiation.reference, now) ||
+        initiation.isExpiredAt(now)) {
+      return _settle(attempt, CoreRejection.identityNotConfirmed);
+    }
+    _set(current: attempt._with(phase: CoreTransferPhase.readyToFinalize));
+    await finalize(attempt.id);
+  }
+
   /// Moves the money: one bodyless finalize once every required check has
-  /// passed. Repeated calls while one is in flight send nothing.
+  /// passed. Repeated calls while one is in flight send nothing. A liveness
+  /// transfer is sent only with a verified identity bound to its reference.
   Future<void> finalize(int id) async {
     final current = _open(id, CoreTransferPhase.readyToFinalize);
     final initiation = current?.initiation;
@@ -470,6 +635,14 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
     }
     if (initiation.isExpiredAt(DateTime.now())) {
       return _settle(current, CoreRejection.initiationExpired);
+    }
+    if (initiation.requiresLiveness &&
+        !(current.identity?.provesTransfer(
+              initiation.reference,
+              DateTime.now(),
+            ) ??
+            false)) {
+      return _settle(current, CoreRejection.identityNotConfirmed);
     }
     final generation = _generation;
     _set(current: current._with(phase: CoreTransferPhase.finalizing));
@@ -488,6 +661,14 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
         _open(id, CoreTransferPhase.finalizing) == null) {
       return;
     }
+    final restricted =
+        outcome is RejectedSubmission &&
+        outcome.reason == CoreRejection.transferRestricted;
+    // On a liveness transfer a 403 means User Service did not accept the
+    // reconfirmation, not that the account is restricted.
+    if (restricted && initiation.requiresLiveness) {
+      outcome = const RejectedSubmission(CoreRejection.identityNotConfirmed);
+    }
     _set(
       current: current._with(
         phase: CoreTransferPhase.settled,
@@ -497,9 +678,7 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
     if (outcome is AcceptedSubmission || outcome is UnknownSubmission) {
       ref.read(refreshFlexTransactionHistoryProvider)().ignore();
       ref.read(customerBankAccountsProvider.notifier).load().ignore();
-    } else if (outcome case RejectedSubmission(
-      reason: CoreRejection.transferRestricted,
-    )) {
+    } else if (restricted) {
       // Possibly frozen from another device: let Home show it.
       ref.read(customerBankAccountsProvider.notifier).load().ignore();
     }

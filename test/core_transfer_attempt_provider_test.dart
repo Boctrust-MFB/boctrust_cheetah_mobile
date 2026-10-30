@@ -9,10 +9,12 @@ import 'package:boctrust_savings_loan/module/core_banking/model/core_transfer_in
 import 'package:boctrust_savings_loan/module/core_banking/model/core_transfer_requery_models.dart';
 import 'package:boctrust_savings_loan/module/core_banking/model/customer_bank_account_models.dart';
 import 'package:boctrust_savings_loan/module/core_banking/model/intrabank_models.dart';
+import 'package:boctrust_savings_loan/module/core_banking/model/transaction_reconfirmation.dart';
 import 'package:boctrust_savings_loan/module/core_banking/provider/core_account_providers.dart';
 import 'package:boctrust_savings_loan/module/core_banking/provider/core_account_activity_providers.dart';
 import 'package:boctrust_savings_loan/module/core_banking/provider/core_transfer_attempt_provider.dart';
 import 'package:boctrust_savings_loan/module/core_banking/service/core_transfer_service.dart';
+import 'package:boctrust_savings_loan/module/core_banking/service/transaction_reconfirmation_service.dart';
 import 'package:boctrust_savings_loan/module/onboarding/provider/auth_session_provider.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -124,6 +126,40 @@ class _Transfers extends CoreTransferService {
   ) async => live.removeAt(0);
 }
 
+NotifierState<TransactionReconfirmation> _identity(
+  ReconfirmationStatus status, {
+  String reference = 'a1b2c3d4e5f6',
+}) => NotifierState.done(
+  TransactionReconfirmation(
+    verificationId: 'v1',
+    status: status,
+    provider: ReconfirmationProvider.dojah,
+    withdrawalReference: reference,
+    expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 10)),
+    validUntil: status == ReconfirmationStatus.verified
+        ? DateTime.now().toUtc().add(const Duration(minutes: 5))
+        : null,
+  ),
+);
+
+/// Answers every reconfirmation request with [next].
+class _Identities extends TransactionReconfirmationService {
+  _Identities() : super(ApiService(Dio()));
+
+  late NotifierState<TransactionReconfirmation> next;
+
+  @override
+  Future<NotifierState<TransactionReconfirmation>> initiate(
+    String reference, {
+    required DateTime consentedAt,
+  }) async => next;
+
+  @override
+  Future<NotifierState<TransactionReconfirmation>> status(
+    String verificationId,
+  ) async => next;
+}
+
 /// Boc Flex with [status]; a single-account read confirms what it holds.
 class _Accounts extends CustomerBankAccountsNotifier {
   _Accounts([this.status = CoreAccountStatus.active]);
@@ -153,6 +189,7 @@ class _Accounts extends CustomerBankAccountsNotifier {
 ({ProviderContainer container, _Transfers transfers}) _setUp({
   bool ready = true,
   CoreAccountStatus flex = CoreAccountStatus.active,
+  TransactionReconfirmationService? identities,
 }) {
   final transfers = _Transfers();
   final container = ProviderContainer(
@@ -161,6 +198,8 @@ class _Accounts extends CustomerBankAccountsNotifier {
       transferAuthorizationReadyProvider.overrideWithValue(ready),
       coreTransferServiceProvider.overrideWithValue(transfers),
       customerBankAccountsProvider.overrideWith(() => _Accounts(flex)),
+      if (identities != null)
+        transactionReconfirmationServiceProvider.overrideWithValue(identities),
     ],
   );
   addTearDown(container.dispose);
@@ -348,20 +387,54 @@ void main() {
     expect(transfers.finalized, 0);
   });
 
-  test('a liveness check stops before any check is sent', () async {
-    final (:container, :transfers) = _setUp();
-    final notifier = container.read(coreTransferAttemptProvider.notifier);
-    transfers.initiation = _initiated(['pin', 'liveness']);
+  test(
+    'a liveness transfer finalizes only with its verified identity',
+    () async {
+      final identities = _Identities();
+      final (:container, :transfers) = _setUp(identities: identities);
+      final notifier = container.read(coreTransferAttemptProvider.notifier);
+      transfers.initiation = _initiated(['pin', 'liveness']);
+      final consent = DateTime.now();
+      // Core would accept at once, so any finalize sent below is counted.
+      transfers.reply.complete(_accepted);
 
-    final id = await _initiate(container);
-    await notifier.verifyPin(id, '0007');
+      // 1. The PIN passes and the attempt waits for identity.
+      transfers.pinReplies.add(_progress(pending: ['liveness']));
+      var id = await _initiate(container);
+      expect(await notifier.verifyPin(id, '0007'), const CheckPassed());
+      expect(_phase(container), CoreTransferPhase.awaitingIdentity);
 
-    expect(transfers.pins, isEmpty);
-    expect(
-      _current(container)?.outcome,
-      const RejectedSubmission(CoreRejection.checksUnsupported),
-    );
-  });
+      // 2. Still comparing: finalize sends nothing.
+      identities.next = _identity(ReconfirmationStatus.comparing);
+      await notifier.startIdentity(id, consentedAt: consent);
+      expect(_phase(container), CoreTransferPhase.checkingIdentity);
+      await notifier.finalize(id);
+      expect(transfers.finalized, 0);
+
+      // 3. Verified for another transfer: settled, never finalized.
+      identities.next = _identity(
+        ReconfirmationStatus.verified,
+        reference: 'ffffffffffff',
+      );
+      await notifier.refreshIdentity(id);
+      await notifier.finalize(id);
+      expect(_phase(container), CoreTransferPhase.settled);
+      expect(transfers.finalized, 0);
+
+      // 4. Verified for this transfer: exactly one finalize.
+      notifier.startNewTransfer();
+      transfers.pinReplies.add(_progress(pending: ['liveness']));
+      id = await _initiate(container);
+      await notifier.verifyPin(id, '0007');
+      identities.next = _identity(ReconfirmationStatus.comparing);
+      await notifier.startIdentity(id, consentedAt: consent);
+      identities.next = _identity(ReconfirmationStatus.verified);
+      await notifier.refreshIdentity(id);
+      await notifier.finalize(id);
+      expect(transfers.finalized, 1);
+      expect(_current(container)?.outcome, isA<AcceptedSubmission>());
+    },
+  );
 
   test('a refused initiate shows Core’s reason', () async {
     final (:container, :transfers) = _setUp();

@@ -1,7 +1,7 @@
 import 'package:equatable/equatable.dart';
 
-/// A check finalize may require. Only [pin] and [otp] are supported; an
-/// initiation asking for [liveness] is never finalized.
+/// A check finalize may require. Transfers satisfy [liveness] through an
+/// identity reconfirmation; flows without one support only [pin] and [otp].
 enum CoreTransferCheck {
   pin('pin'),
   otp('otp'),
@@ -68,7 +68,8 @@ class CoreTransferInitiation extends Equatable {
 
   bool get requiresLiveness => checks.contains(CoreTransferCheck.liveness);
 
-  /// Whether this app can satisfy every check; liveness is not supported.
+  /// Whether a flow without identity reconfirmation can satisfy every check;
+  /// liveness is not supported there. Transfers do not use this.
   bool get supported => !checks.contains(CoreTransferCheck.liveness);
 
   bool isExpiredAt(DateTime now) => !now.toUtc().isBefore(expiresAt);

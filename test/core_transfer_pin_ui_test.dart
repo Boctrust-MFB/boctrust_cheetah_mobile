@@ -631,26 +631,6 @@ void main() {
 
       expect(container.read(coreTransferAttemptProvider).current, isNull);
     });
-
-    testWidgets('a liveness check is refused without finalizing', (
-      tester,
-    ) async {
-      final transfers = _Transfers()
-        ..initiation = NotifierState.done(
-          CoreTransferInitiation(
-            reference: 'a1b2c3d4e5f6',
-            checks: const {CoreTransferCheck.pin, CoreTransferCheck.liveness},
-            expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
-          ),
-        );
-      await _pumpBoctrust(tester, transfers);
-
-      await _sendTen(tester);
-
-      expect(find.byKey(const Key('transaction-pin-sheet')), findsNothing);
-      expect(find.text('Transfer declined'), findsOneWidget);
-      expect(transfers.finalized, 0);
-    });
   });
 
   // BOCTRUST recipients are paid through the intrabank flow, so the
