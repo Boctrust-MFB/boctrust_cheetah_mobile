@@ -19,6 +19,7 @@ import '../service/transaction_authorizer.dart';
 import 'biometric_approval_sheet.dart';
 import 'core_flow_widgets.dart';
 import 'transaction_pin_sheet.dart';
+import 'transfer_identity_panel.dart';
 import 'transfer_otp_sheet.dart';
 
 /// Starts the reviewed [draft]: initiate, then the PIN sheet (PIN verify),
@@ -139,6 +140,10 @@ Future<void> authorizeStagedTransfer(
     }
   }
 
+  // Core asked for liveness: the attempt view's identity step takes over,
+  // and leaving the screen no longer cancels the attempt.
+  if (at(CoreTransferPhase.awaitingIdentity)) return;
+
   if (at(CoreTransferPhase.readyToFinalize)) await notifier.finalize(id);
 }
 
@@ -148,6 +153,8 @@ Future<void> authorizeStagedTransfer(
 bool showsAttempt(CoreTransferAttempt? attempt) => switch (attempt?.phase) {
   CoreTransferPhase.initiating ||
   CoreTransferPhase.verifyingPin ||
+  CoreTransferPhase.awaitingIdentity ||
+  CoreTransferPhase.checkingIdentity ||
   CoreTransferPhase.readyToFinalize ||
   CoreTransferPhase.finalizing ||
   CoreTransferPhase.settled => true,
@@ -257,6 +264,9 @@ class _CoreTransferAttemptViewState
         return const ApiLoadingSection(label: 'Verifying your PIN');
       case CoreTransferPhase.readyToFinalize || CoreTransferPhase.finalizing:
         return const ApiLoadingSection(label: 'Sending your transfer');
+      case CoreTransferPhase.awaitingIdentity ||
+          CoreTransferPhase.checkingIdentity:
+        return TransferIdentityPanel(attempt: attempt, onExit: widget.onExit);
       case CoreTransferPhase.settled:
         break;
       case _:
