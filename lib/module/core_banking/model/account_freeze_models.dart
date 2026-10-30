@@ -58,10 +58,14 @@ class AccountFreezeResult extends Equatable {
   List<Object?> get props => [accountNumber, status, frozenBy, frozenAt];
 }
 
-/// Core's reply to a request for an unfreeze code. Core's staging-only
-/// `otpCode` field is deliberately not read, so it can never be kept.
+/// Core's reply to a request for an unfreeze code. [otpCode] is Core's
+/// staging-only copy of the code, shown only in the staging test banner.
 class UnfreezeOtpReply extends Equatable {
-  const UnfreezeOtpReply({required this.otpSent, this.otpExpiresAt});
+  const UnfreezeOtpReply({
+    required this.otpSent,
+    this.otpExpiresAt,
+    this.otpCode,
+  });
 
   factory UnfreezeOtpReply.fromJson(Object? json) {
     if (json is! Map) throw const FormatException('Invalid code reply.');
@@ -71,11 +75,15 @@ class UnfreezeOtpReply extends Equatable {
       otpExpiresAt: otpExpiresAt is String
           ? DateTime.tryParse(otpExpiresAt)?.toUtc()
           : null,
+      otpCode: json['otpCode'] is String ? json['otpCode'] as String : null,
     );
   }
 
   final bool otpSent;
   final DateTime? otpExpiresAt;
+
+  /// Left out of [props] so it never reaches a log.
+  final String? otpCode;
 
   @override
   List<Object?> get props => [otpSent, otpExpiresAt];

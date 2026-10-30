@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/services.dart';
 import '../../onboarding/provider/auth_session_provider.dart';
+import '../../onboarding/provider/test_otp_provider.dart';
 import '../model/account_freeze_models.dart';
 import '../model/customer_bank_account_models.dart';
 import '../service/core_account_service.dart';
@@ -160,6 +161,13 @@ class AccountFreezeController extends Notifier<AccountFreezeState>
     if (!isCurrent(token)) return;
     switch (outcome) {
       case FreezeSucceeded(:final result) when result.otpSent:
+        ref
+            .read(testOtpProvider.notifier)
+            .showCode(
+              TestOtpFlow.accountUnfreeze,
+              result.otpCode,
+              result.otpExpiresAt,
+            );
         state = AccountFreezeState(
           phase: AccountFreezePhase.awaitingOtp,
           otpExpiresAt: result.otpExpiresAt,
@@ -193,6 +201,7 @@ class AccountFreezeController extends Notifier<AccountFreezeState>
     if (!isCurrent(token)) return;
     switch (outcome) {
       case FreezeSucceeded(:final result):
+        ref.read(testOtpProvider.notifier).clear(TestOtpFlow.accountUnfreeze);
         _memory.record(result);
         await _confirm(token);
       case FreezeWrongCredentials():

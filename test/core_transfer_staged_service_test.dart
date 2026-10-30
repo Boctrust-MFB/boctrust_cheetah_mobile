@@ -199,7 +199,7 @@ void main() {
     },
   );
 
-  test('the staging OTP in a reply is never kept', () async {
+  test('the staging OTP in a reply never reaches props or logs', () async {
     final parsed = CoreCheckProgress.fromJson(progress);
 
     expect('${parsed.props}', isNot(contains('123456')));

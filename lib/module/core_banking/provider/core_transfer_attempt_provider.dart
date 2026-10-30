@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/feature_capability.dart';
 import '../../../app/services.dart';
 import '../../onboarding/provider/auth_session_provider.dart';
+import '../../onboarding/provider/test_otp_provider.dart';
 import '../model/core_check_progress.dart';
 import '../model/core_submission_models.dart';
 import '../model/core_transfer_initiation.dart';
@@ -408,6 +409,7 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
         _settle(current, CoreRejection.checksInconsistent);
         return const CheckStopped();
       }
+      _showTestOtp(step, result.data);
       _set(
         current: current._with(
           phase: step == CoreTransferCheck.pin && initiation.needsOtp
@@ -437,6 +439,21 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
     return const CheckStopped();
   }
 
+  /// Staging only: offers the code Core sent with a PIN pass, and drops it
+  /// once the OTP passed.
+  void _showTestOtp(CoreTransferCheck step, CoreCheckProgress? progress) {
+    final testOtp = ref.read(testOtpProvider.notifier);
+    if (step == CoreTransferCheck.otp) {
+      testOtp.clear(TestOtpFlow.coreCheck);
+    } else {
+      testOtp.showCode(
+        TestOtpFlow.coreCheck,
+        progress?.otpCode,
+        progress?.otpExpiresAt,
+      );
+    }
+  }
+
   bool _resending = false;
 
   /// Asks Core to send the OTP again, on the customer's request. Only once
@@ -457,7 +474,10 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
       if (!ref.mounted || generation != _generation) {
         return const CheckStopped();
       }
-      if (result.isDone) return const CheckPassed();
+      if (result.isDone) {
+        _showTestOtp(CoreTransferCheck.pin, result.data);
+        return const CheckPassed();
+      }
       if (result.statusCode == 403) {
         final still = _open(id, CoreTransferPhase.awaitingOtp);
         if (still != null) _settle(still, CoreRejection.checkRefused);

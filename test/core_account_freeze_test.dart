@@ -91,30 +91,33 @@ void main() {
     );
   });
 
-  test('the unfreeze code reply drops the staging-only otpCode', () async {
-    final core = _Core({
-      'otpSent': true,
-      'otpExpiresAt': '2026-10-17T09:05:00Z',
-      'otpCode': '654321',
-    });
+  test(
+    'the unfreeze code reply keeps the staging otpCode out of props',
+    () async {
+      final core = _Core({
+        'otpSent': true,
+        'otpExpiresAt': '2026-10-17T09:05:00Z',
+        'otpCode': '654321',
+      });
 
-    final outcome = await _service(core).sendUnfreezeOtp('1100925452');
+      final outcome = await _service(core).sendUnfreezeOtp('1100925452');
 
-    expect(
-      outcome,
-      FreezeSucceeded(
-        UnfreezeOtpReply(
-          otpSent: true,
-          otpExpiresAt: DateTime.utc(2026, 10, 17, 9, 5),
+      expect(
+        outcome,
+        FreezeSucceeded(
+          UnfreezeOtpReply(
+            otpSent: true,
+            otpExpiresAt: DateTime.utc(2026, 10, 17, 9, 5),
+          ),
         ),
-      ),
-    );
-    expect(
-      core.requests.single.path,
-      '/me/bank-accounts/1100925452/unfreeze/otp',
-    );
-    expect(core.requests.single.data, isNull);
-  });
+      );
+      expect(
+        core.requests.single.path,
+        '/me/bank-accounts/1100925452/unfreeze/otp',
+      );
+      expect(core.requests.single.data, isNull);
+    },
+  );
 
   test('a 403 means the bank froze the account', () async {
     final outcome = await _service(

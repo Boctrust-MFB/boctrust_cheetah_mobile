@@ -4,6 +4,7 @@ import 'package:iconsax_plus/iconsax_plus.dart';
 import '../../../app/theme.dart';
 import '../../app_flow/app_ui.dart';
 import '../../component/text_fields.dart';
+import '../../onboarding/provider/test_otp_provider.dart';
 import '../provider/core_transfer_attempt_provider.dart';
 
 /// Collects the six-digit OTP Core sent when the PIN was verified, and
@@ -161,6 +162,8 @@ class _TransferOtpSheetState extends State<TransferOtpSheet> {
             autofocus: true,
             isActive: !_closing && !_verifying,
           ),
+          const SizedBox(height: BocSpace.xs),
+          TestOtpBanner(flow: TestOtpFlow.coreCheck, controller: _controller),
           if (message != null) ...[
             const SizedBox(height: BocSpace.xs),
             Semantics(

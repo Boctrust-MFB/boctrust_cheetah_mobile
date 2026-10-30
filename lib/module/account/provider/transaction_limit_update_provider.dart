@@ -6,6 +6,7 @@ import '../../core_banking/model/core_check_progress.dart';
 import '../../core_banking/model/core_transfer_initiation.dart';
 import '../../core_banking/provider/core_transfer_attempt_provider.dart';
 import '../../onboarding/provider/auth_session_provider.dart';
+import '../../onboarding/provider/test_otp_provider.dart';
 import '../model/transaction_limit_update_models.dart';
 import '../service/core_transaction_limit_service.dart';
 import 'transaction_limit_provider.dart';
@@ -176,6 +177,7 @@ class TransactionLimitUpdateNotifier extends Notifier<LimitUpdateState> {
         _fail("We couldn't confirm this change's security checks.");
         return const CheckStopped();
       }
+      _showTestOtp(step, result.data);
       state = state._to(
         step == CoreTransferCheck.pin && initiation.needsOtp
             ? LimitUpdatePhase.awaitingOtp
@@ -211,11 +213,28 @@ class TransactionLimitUpdateNotifier extends Notifier<LimitUpdateState> {
       final result = await ref
           .read(coreTransactionLimitServiceProvider)
           .resendLimitOtp(initiation.reference);
-      return result.isDone
-          ? const CheckPassed()
-          : const CheckRetry("We couldn't send a new code. Try again.");
+      if (!result.isDone) {
+        return const CheckRetry("We couldn't send a new code. Try again.");
+      }
+      _showTestOtp(CoreTransferCheck.pin, result.data);
+      return const CheckPassed();
     } finally {
       _resending = false;
+    }
+  }
+
+  /// Staging only: offers the code Core sent with a PIN pass, and drops it
+  /// once the OTP passed.
+  void _showTestOtp(CoreTransferCheck step, CoreCheckProgress? progress) {
+    final testOtp = ref.read(testOtpProvider.notifier);
+    if (step == CoreTransferCheck.otp) {
+      testOtp.clear(TestOtpFlow.coreCheck);
+    } else {
+      testOtp.showCode(
+        TestOtpFlow.coreCheck,
+        progress?.otpCode,
+        progress?.otpExpiresAt,
+      );
     }
   }
 

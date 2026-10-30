@@ -7,6 +7,7 @@ import '../../../app/response_handler.dart';
 import '../../../app/theme.dart';
 import '../../app_flow/app_ui.dart';
 import '../../component/text_fields.dart';
+import '../../onboarding/provider/test_otp_provider.dart';
 import '../model/customer_bank_account_models.dart';
 import '../provider/account_freeze_provider.dart';
 import '../provider/core_account_providers.dart';
@@ -274,6 +275,11 @@ class _UnfreezeCodeSheetState extends ConsumerState<UnfreezeCodeSheet> {
             pinCtrl: _controller,
             autofocus: true,
             isActive: !_closing,
+          ),
+          const SizedBox(height: BocSpace.xs),
+          TestOtpBanner(
+            flow: TestOtpFlow.accountUnfreeze,
+            controller: _controller,
           ),
           if (message != null) ...[
             const SizedBox(height: BocSpace.xs),

@@ -6,8 +6,8 @@ import 'core_transfer_initiation.dart';
 /// Core's reply to a PIN verify, OTP verify or OTP resend: which checks are
 /// required, completed and pending, and whether an OTP was sent.
 ///
-/// The development/staging `otpCode` is deliberately dropped: the code always
-/// comes from the customer.
+/// [otpCode] is Core's development/staging-only copy of the code; production
+/// never sends it. It is only shown in the staging test banner.
 class CoreCheckProgress extends Equatable {
   const CoreCheckProgress({
     this.reference,
@@ -16,6 +16,7 @@ class CoreCheckProgress extends Equatable {
     this.pending = const {},
     this.otpSent,
     this.otpExpiresAt,
+    this.otpCode,
   });
 
   /// Refuses an unknown check name rather than guessing its meaning.
@@ -42,6 +43,7 @@ class CoreCheckProgress extends Equatable {
       otpExpiresAt: DateTime.tryParse(
         coreText(json['otpExpiresAt']) ?? '',
       )?.toUtc(),
+      otpCode: coreText(json['otpCode']),
     );
   }
 
@@ -51,6 +53,9 @@ class CoreCheckProgress extends Equatable {
   final Set<CoreTransferCheck> pending;
   final bool? otpSent;
   final DateTime? otpExpiresAt;
+
+  /// Left out of [props] so it never reaches a log.
+  final String? otpCode;
 
   @override
   List<Object?> get props => [

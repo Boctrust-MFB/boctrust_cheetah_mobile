@@ -13,6 +13,10 @@ enum TestOtpFlow {
   pinRecovery,
   newDeviceLogin,
   identifierVerification,
+
+  /// The code Core sends after a transfer or limit-change PIN is verified.
+  coreCheck,
+  accountUnfreeze,
 }
 
 class TestOtpHint extends Equatable {
@@ -55,12 +59,22 @@ class TestOtpNotifier extends Notifier<Map<TestOtpFlow, TestOtpHint>> {
     return const {};
   }
 
-  void show(TestOtpFlow flow, OtpData otpData) {
+  void show(TestOtpFlow flow, OtpData otpData) =>
+      showCode(flow, otpData.otpCode, otpData.expiresAt);
+
+  /// Shows a staging [code] until [expiresAt]. A missing code drops any
+  /// earlier one for [flow], so a stale code is never offered.
+  void showCode(TestOtpFlow flow, String? code, DateTime? expiresAt) {
     if (!ref.read(stagingModeProvider)) return;
-    final code = otpData.otpCode;
-    if (code == null || !isValidOtpCode(code)) return;
-    final expiresAt = otpData.expiresAt.toUtc();
-    if (!DateTime.now().toUtc().isBefore(expiresAt)) return;
+    if (code == null || !isValidOtpCode(code) || expiresAt == null) {
+      clear(flow);
+      return;
+    }
+    expiresAt = expiresAt.toUtc();
+    if (!DateTime.now().toUtc().isBefore(expiresAt)) {
+      clear(flow);
+      return;
+    }
 
     _timers.remove(flow)?.cancel();
     state = {
