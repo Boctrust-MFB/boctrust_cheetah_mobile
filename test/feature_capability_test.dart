@@ -204,7 +204,12 @@ void main() {
         ),
         FeatureAvailability.available,
       );
-      expect(paths(capability).every((p) => p.startsWith('/me/')), isTrue);
+      expect(
+        capabilityRequirements[capability]!.operations
+            .where((o) => o.backend == ApiBackend.core)
+            .every((o) => o.path.startsWith('/me/')),
+        isTrue,
+      );
     }
     expect(
       paths(boctrust),

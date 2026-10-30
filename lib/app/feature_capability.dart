@@ -277,6 +277,16 @@ const capabilityRequirements = <FeatureCapability, CapabilityRequirement>{
     stagingOnly: true,
     operations: {
       (
+        backend: ApiBackend.user,
+        method: 'POST',
+        path: ApiEndpoints.initiateIdentityReconfirmation,
+      ),
+      (
+        backend: ApiBackend.user,
+        method: 'GET',
+        path: ApiEndpoints.identityReconfirmationTemplate,
+      ),
+      (
         backend: ApiBackend.core,
         method: 'GET',
         path: CoreApiEndpoints.bankAccounts,
@@ -327,6 +337,16 @@ const capabilityRequirements = <FeatureCapability, CapabilityRequirement>{
   FeatureCapability.interbankTransfers: CapabilityRequirement(
     stagingOnly: true,
     operations: {
+      (
+        backend: ApiBackend.user,
+        method: 'POST',
+        path: ApiEndpoints.initiateIdentityReconfirmation,
+      ),
+      (
+        backend: ApiBackend.user,
+        method: 'GET',
+        path: ApiEndpoints.identityReconfirmationTemplate,
+      ),
       (
         backend: ApiBackend.core,
         method: 'GET',

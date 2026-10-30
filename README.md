@@ -16,6 +16,7 @@ provides the public privacy policy and terms shown in the app. KYC builds also d
 `DOJAH_SELFIE_WIDGET_ID` and `DOJAH_GOVERNMENT_WIDGET_ID` with the published
 widget for each environment. Copy `.env.example` for a new local setup;
 environment files remain gitignored.
+`DOJAH_TRANSACTION_WIDGET_ID` is optional; falls back to the BVN selfie widget.
 
 `CORE_BASE_URL=https://core-dev-api.centurysoftware.dev/api` points at the
 separate Core Service (accounts, products, transfers, bills) and follows the

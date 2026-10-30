@@ -21,6 +21,10 @@ abstract final class Env {
     'DOJAH_GOVERNMENT_WIDGET_ID',
   );
 
+  static const dojahTransactionWidgetId = String.fromEnvironment(
+    'DOJAH_TRANSACTION_WIDGET_ID',
+  );
+
   static bool get isStaging => environment == 'staging';
   static bool get isProd => environment == 'prod';
 }

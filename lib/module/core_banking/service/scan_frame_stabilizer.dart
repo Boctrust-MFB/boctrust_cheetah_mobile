@@ -28,9 +28,7 @@ class ScanFrameStabilizer {
         if (entry.value >= required) entry.key,
     ];
     if (stable.isEmpty) return null;
-    final lines = <String>{
-      for (final f in _frames) ...f.bankTextLines,
-    };
+    final lines = <String>{for (final f in _frames) ...f.bankTextLines};
     return ScanCandidates(
       accountNumbers: stable,
       bankTextLines: lines.toList(),

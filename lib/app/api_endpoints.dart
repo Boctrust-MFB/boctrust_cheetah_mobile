@@ -33,6 +33,13 @@ abstract final class ApiEndpoints {
   static String withdrawalBankAccount(String bankAccountId) =>
       '$withdrawalBankAccounts/${Uri.encodeComponent(bankAccountId)}';
 
+  static const initiateIdentityReconfirmation =
+      '/users/me/identity-reconfirmations/initiate';
+  static const identityReconfirmationTemplate =
+      '/users/me/identity-reconfirmations/{id}';
+  static String identityReconfirmation(String id) =>
+      '/users/me/identity-reconfirmations/${Uri.encodeComponent(id)}';
+
   static const ownKycStatus = '/users/me/kyc/status';
   static const kycProviderConfig = '/users/me/kyc/provider-config';
   static const governmentIdDocumentTypes =
