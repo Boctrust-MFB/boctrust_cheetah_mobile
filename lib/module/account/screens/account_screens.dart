@@ -548,12 +548,24 @@ extension _AccountScreens on _AccountPageState {
                             : null,
                         autovalidateMode: autovalidateMode,
                         autofillHints: const [AutofillHints.password],
+                        onChanged: (_) {
+                          setDialogState(() {});
+                          if (autovalidateMode != AutovalidateMode.disabled) {
+                            formKey.currentState?.validate();
+                          }
+                        },
                       ),
                       const SizedBox(height: 12),
                       AppPasswordField(
                         label: 'New password',
                         controller: _passwordController,
-                        validator: validators.isPasswordValid,
+                        validator: (value) {
+                          final error = validators.isPasswordValid(value);
+                          if (error != null) return error;
+                          return value == _currentSecretController.text
+                              ? 'Choose a different password.'
+                              : null;
+                        },
                         autovalidateMode: autovalidateMode,
                         autofillHints: const [AutofillHints.newPassword],
                         onChanged: (_) => setDialogState(() {}),
@@ -667,6 +679,12 @@ extension _AccountScreens on _AccountPageState {
                           obscureText: true,
                           validator: validators.transactionPin,
                           autoValidateMode: autovalidateMode,
+                          onChanged: (_) {
+                            setDialogState(() {});
+                            if (autovalidateMode != AutovalidateMode.disabled) {
+                              formKey.currentState?.validate();
+                            }
+                          },
                         ),
                         const SizedBox(height: 12),
                         const Text('New PIN'),
@@ -675,7 +693,15 @@ extension _AccountScreens on _AccountPageState {
                           pinLength: 4,
                           pinCtrl: _pinController,
                           obscureText: true,
-                          validator: validators.strongTransactionPin,
+                          validator: (value) {
+                            final error = validators.strongTransactionPin(
+                              value,
+                            );
+                            if (error != null) return error;
+                            return value == _currentSecretController.text
+                                ? 'Choose a different PIN.'
+                                : null;
+                          },
                           autoValidateMode: autovalidateMode,
                         ),
                         const SizedBox(height: 12),

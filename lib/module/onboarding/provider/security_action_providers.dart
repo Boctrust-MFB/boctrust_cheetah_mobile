@@ -72,6 +72,10 @@ class ChangePasswordNotifier extends Notifier<NotifierState<EmptyData>> {
       );
       return;
     }
+    if (newPassword == currentPassword) {
+      state = const NotifierState.error('Choose a different password.');
+      return;
+    }
     state = const NotifierState.loading();
     final result = await ref
         .read(authServiceProvider)
@@ -125,6 +129,10 @@ class ChangePinNotifier extends Notifier<NotifierState<EmptyData>> {
       state = const NotifierState.error(
         'Enter your current PIN and choose a hard-to-guess new PIN.',
       );
+      return;
+    }
+    if (newPin == currentPin) {
+      state = const NotifierState.error('Choose a different PIN.');
       return;
     }
     state = const NotifierState.loading();
