@@ -5,16 +5,21 @@ class BiometricOperationResult {
     required this.succeeded,
     this.cancelled = false,
     this.message,
+    this.credentialRejected = false,
   });
 
   const BiometricOperationResult.cancelled()
     : succeeded = false,
       cancelled = true,
-      message = null;
+      message = null,
+      credentialRejected = false;
 
   final bool succeeded;
   final bool cancelled;
   final String? message;
+
+  /// The server refused the current password/PIN the user typed.
+  final bool credentialRejected;
 }
 
 /// Maps a biometric prompt outcome to the user-facing result. The fallback

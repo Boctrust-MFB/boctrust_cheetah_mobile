@@ -25,6 +25,7 @@ import '../../core_banking/model/core_json.dart';
 import '../../core_banking/model/customer_bank_account_models.dart';
 import '../../core_banking/provider/biometric_transfer_provider.dart';
 import '../../core_banking/provider/core_account_providers.dart';
+import '../../core_banking/screens/core_flow_widgets.dart';
 import '../../kyc/model/kyc_contact_requirement.dart';
 import '../../onboarding/model/auth_enums.dart';
 import '../../onboarding/model/auth_flow_models.dart';

@@ -114,71 +114,85 @@ extension _AccountControlScreens on _AccountPageState {
   Future<void> _showBiometricEnrollmentDialog() async {
     _currentSecretController.clear();
     final formKey = GlobalKey<FormState>();
+    String? credentialError;
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => Consumer(
-        builder: (dialogContext, ref, _) {
-          final busy = ref.watch(biometricLoginProvider).isBusy;
-          return AlertDialog(
-            scrollable: true,
-            title: const Text('Turn on biometric login'),
-            content: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Enter your current BOCTRUST password to continue.',
-                  ),
-                  const SizedBox(height: 12),
-                  AppPasswordField(
-                    label: 'Current password',
-                    controller: _currentSecretController,
-                    validator: (value) => value == null || value.isEmpty
-                        ? 'Enter your current password'
-                        : null,
-                    autofillHints: const [AutofillHints.password],
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: busy ? null : () => Navigator.pop(dialogContext),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: busy
-                    ? null
-                    : () async {
-                        if (formKey.currentState?.validate() != true) return;
-                        final result = await ref
-                            .read(biometricLoginProvider.notifier)
-                            .enable(_currentSecretController.text);
-                        if (!mounted || !dialogContext.mounted) return;
-                        if (result.succeeded) {
-                          Navigator.pop(dialogContext);
-                          showSuccessMessage('Biometric login is on.');
-                        } else if (result.cancelled) {
-                          Navigator.pop(dialogContext);
-                        } else {
-                          showErrorMessage(
-                            result.message ??
-                                'We could not turn on biometric login.',
-                          );
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => Consumer(
+          builder: (dialogContext, ref, _) {
+            final busy = ref.watch(biometricLoginProvider).isBusy;
+            return AlertDialog(
+              scrollable: true,
+              title: const Text('Turn on biometric login'),
+              content: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Enter your current BOCTRUST password to continue.',
+                    ),
+                    const SizedBox(height: 12),
+                    AppPasswordField(
+                      label: 'Current password',
+                      controller: _currentSecretController,
+                      validator: (value) => value == null || value.isEmpty
+                          ? 'Enter your current password'
+                          : null,
+                      autofillHints: const [AutofillHints.password],
+                      onChanged: (_) {
+                        if (credentialError != null) {
+                          setDialogState(() => credentialError = null);
                         }
                       },
-                child: busy
-                    ? const SizedBox.square(
-                        dimension: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Continue'),
+                    ),
+                    if (credentialError != null) FieldError(credentialError!),
+                  ],
+                ),
               ),
-            ],
-          );
-        },
+              actions: [
+                TextButton(
+                  onPressed: busy ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: busy
+                      ? null
+                      : () async {
+                          if (formKey.currentState?.validate() != true) return;
+                          final result = await ref
+                              .read(biometricLoginProvider.notifier)
+                              .enable(_currentSecretController.text);
+                          if (!mounted || !dialogContext.mounted) return;
+                          if (result.succeeded) {
+                            Navigator.pop(dialogContext);
+                            showSuccessMessage('Biometric login is on.');
+                          } else if (result.cancelled) {
+                            Navigator.pop(dialogContext);
+                          } else if (result.credentialRejected) {
+                            _currentSecretController.clear();
+                            setDialogState(
+                              () => credentialError = result.message,
+                            );
+                          } else {
+                            showErrorMessage(
+                              result.message ??
+                                  'We could not turn on biometric login.',
+                            );
+                          }
+                        },
+                  child: busy
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Continue'),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
     if (!mounted) return;
@@ -253,85 +267,101 @@ extension _AccountControlScreens on _AccountPageState {
   Future<void> _showBiometricApprovalDialog() async {
     _currentSecretController.clear();
     final formKey = GlobalKey<FormState>();
+    String? credentialError;
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => Consumer(
-        builder: (dialogContext, ref, _) {
-          final approval = ref.watch(biometricApprovalProvider);
-          final busy = approval.isBusy;
-          final progress = switch (approval.phase) {
-            BiometricApprovalPhase.verifyingPin => 'Verifying your PIN…',
-            BiometricApprovalPhase.confirmingBiometric =>
-              'Confirm with biometrics…',
-            BiometricApprovalPhase.enabling => 'Saving…',
-            _ => null,
-          };
-          return AlertDialog(
-            scrollable: true,
-            title: const Text('Turn on biometric approval'),
-            content: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Enter your current 4-digit transaction PIN. It is saved '
-                    'on this device to approve transfers and bill payments.',
-                  ),
-                  const SizedBox(height: 12),
-                  AppTextField(
-                    label: 'Current PIN',
-                    controller: _currentSecretController,
-                    obscureText: true,
-                    keyboardType: TextInputType.number,
-                    enabled: !busy,
-                    validator: validators.transactionPin,
-                  ),
-                  if (progress != null) ...[
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => Consumer(
+          builder: (dialogContext, ref, _) {
+            final approval = ref.watch(biometricApprovalProvider);
+            final busy = approval.isBusy;
+            final progress = switch (approval.phase) {
+              BiometricApprovalPhase.verifyingPin => 'Verifying your PIN…',
+              BiometricApprovalPhase.confirmingBiometric =>
+                'Confirm with biometrics…',
+              BiometricApprovalPhase.enabling => 'Saving…',
+              _ => null,
+            };
+            return AlertDialog(
+              scrollable: true,
+              title: const Text('Turn on biometric approval'),
+              content: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Enter your current 4-digit transaction PIN. After we verify '
+                      'it and you confirm with biometrics, the PIN is saved '
+                      'securely on this device to approve transfers and bill '
+                      'payments.',
+                    ),
                     const SizedBox(height: 12),
-                    Text(progress),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: busy ? null : () => Navigator.pop(dialogContext),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: busy
-                    ? null
-                    : () async {
-                        if (formKey.currentState?.validate() != true) return;
-                        final result = await ref
-                            .read(biometricApprovalProvider.notifier)
-                            .enable(_currentSecretController.text);
-                        if (!mounted || !dialogContext.mounted) return;
-                        if (result.succeeded) {
-                          Navigator.pop(dialogContext);
-                          showSuccessMessage('Biometric approval is on.');
-                        } else if (result.cancelled) {
-                          Navigator.pop(dialogContext);
-                        } else {
-                          showErrorMessage(
-                            result.message ??
-                                'We could not turn on biometric approval.',
-                          );
+                    AppTextField(
+                      label: 'Current PIN',
+                      controller: _currentSecretController,
+                      obscureText: true,
+                      keyboardType: TextInputType.number,
+                      enabled: !busy,
+                      validator: validators.transactionPin,
+                      onChanged: (_) {
+                        if (credentialError != null) {
+                          setDialogState(() => credentialError = null);
                         }
                       },
-                child: busy
-                    ? const SizedBox.square(
-                        dimension: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Continue'),
+                    ),
+                    if (credentialError != null) FieldError(credentialError!),
+                    if (progress != null) ...[
+                      const SizedBox(height: 12),
+                      Text(progress),
+                    ],
+                  ],
+                ),
               ),
-            ],
-          );
-        },
+              actions: [
+                TextButton(
+                  onPressed: busy ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: busy
+                      ? null
+                      : () async {
+                          if (formKey.currentState?.validate() != true) return;
+                          final result = await ref
+                              .read(biometricApprovalProvider.notifier)
+                              .enable(_currentSecretController.text);
+                          if (!mounted || !dialogContext.mounted) return;
+                          if (result.succeeded) {
+                            Navigator.pop(dialogContext);
+                            showSuccessMessage('Biometric approval is on.');
+                          } else if (result.cancelled) {
+                            Navigator.pop(dialogContext);
+                          } else if (result.credentialRejected) {
+                            _currentSecretController.clear();
+                            setDialogState(
+                              () => credentialError = result.message,
+                            );
+                          } else {
+                            showErrorMessage(
+                              result.message ??
+                                  'We could not turn on biometric approval.',
+                            );
+                          }
+                        },
+                  child: busy
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Continue'),
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
     if (!mounted) return;

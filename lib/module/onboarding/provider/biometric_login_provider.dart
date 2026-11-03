@@ -217,11 +217,20 @@ class BiometricLoginNotifier extends Notifier<BiometricLoginState> {
         .verifyCurrentPassword(VerifyCurrentPasswordRequest(currentPassword));
     if (!_isCurrent(token)) return const BiometricOperationResult.cancelled();
     if (!verified.isDone) {
-      final message = verified.noAuth || verified.statusCode == 401
-          ? 'That password is incorrect.'
-          : verified.message ?? 'We could not confirm your password.';
+      if (verified.errorCode == _invalidCurrentPassword) {
+        return _restore(
+          const BiometricOperationResult(
+            succeeded: false,
+            credentialRejected: true,
+            message: 'That password is incorrect.',
+          ),
+        );
+      }
       return _restore(
-        BiometricOperationResult(succeeded: false, message: message),
+        BiometricOperationResult(
+          succeeded: false,
+          message: verified.message ?? 'We could not confirm your password.',
+        ),
       );
     }
 
@@ -476,6 +485,9 @@ class BiometricLoginNotifier extends Notifier<BiometricLoginState> {
       'Biometric login was turned off for your security, after a security '
       'update or because the app was not opened for six months. Sign in with '
       'your password, then turn it on again in Security Center.';
+
+  /// `errorCode` User Service returns (HTTP 400/422) for a wrong current password.
+  static const _invalidCurrentPassword = 'INVALID_CURRENT_PASSWORD';
 
   static const _busy = BiometricOperationResult(
     succeeded: false,

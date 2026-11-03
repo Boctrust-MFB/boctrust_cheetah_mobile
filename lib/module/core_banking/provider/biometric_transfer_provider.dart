@@ -229,11 +229,20 @@ class BiometricApprovalNotifier extends Notifier<BiometricApprovalState> {
         .verifyCurrentPin(VerifyCurrentPinRequest(currentPin));
     if (!_isCurrent(token)) return const BiometricOperationResult.cancelled();
     if (!verified.isDone) {
-      final message = verified.noAuth || verified.statusCode == 401
-          ? 'That PIN is incorrect.'
-          : verified.message ?? 'We could not confirm your PIN.';
+      if (verified.errorCode == _invalidCurrentPin) {
+        return _restore(
+          const BiometricOperationResult(
+            succeeded: false,
+            credentialRejected: true,
+            message: 'That PIN is incorrect.',
+          ),
+        );
+      }
       return _restore(
-        BiometricOperationResult(succeeded: false, message: message),
+        BiometricOperationResult(
+          succeeded: false,
+          message: verified.message ?? 'We could not confirm your PIN.',
+        ),
       );
     }
 
@@ -540,6 +549,9 @@ class BiometricApprovalNotifier extends Notifier<BiometricApprovalState> {
     if (!state.isBusy) state = state.copyWith(message: message);
     return BiometricOperationResult(succeeded: false, message: message);
   }
+
+  /// `errorCode` User Service returns (HTTP 400/422) for a wrong current PIN.
+  static const _invalidCurrentPin = 'INVALID_CURRENT_PIN';
 
   static const _busy = BiometricOperationResult(
     succeeded: false,
