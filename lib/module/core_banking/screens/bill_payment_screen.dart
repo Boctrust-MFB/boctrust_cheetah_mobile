@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iconsax_plus/iconsax_plus.dart';
 
@@ -12,6 +13,7 @@ import '../../../utils/utils.dart';
 import '../../app_flow/app_ui.dart';
 import '../model/beneficiary_models.dart';
 import '../model/bill_models.dart';
+import '../model/bill_phone_number.dart';
 import '../model/core_money.dart';
 import '../provider/biometric_transfer_provider.dart';
 import '../provider/core_account_providers.dart';
@@ -421,6 +423,12 @@ class _BillPaymentFlowState extends ConsumerState<BillPaymentFlow> {
     final fixed = item.amountNaira;
     final amount = amountWithin(fixed ?? _amount.text, available, naira: true);
     final customerId = _customerId.text.trim();
+    final group = _groupOf(biller);
+    final phoneBiller =
+        group == BillerGroup.airtime || group == BillerGroup.data;
+    final customerIdValid =
+        customerId.isNotEmpty &&
+        (!phoneBiller || isValidBillMobileNumber(customerId));
     final saved = _beneficiaries
         ? [
             for (final b
@@ -452,13 +460,17 @@ class _BillPaymentFlowState extends ConsumerState<BillPaymentFlow> {
       AppTextField(
         label: biller.customerFieldLabel,
         controller: _customerId,
-        keyboardType:
-            widget.group == BillerGroup.airtime ||
-                widget.group == BillerGroup.data
-            ? TextInputType.phone
-            : TextInputType.text,
+        keyboardType: phoneBiller ? TextInputType.phone : TextInputType.text,
+        inputFormatters: phoneBiller
+            ? [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(11),
+              ]
+            : null,
         onChanged: (_) => _go(_Step.details),
       ),
+      if (phoneBiller && customerId.isNotEmpty && !customerIdValid)
+        const FieldError('Enter an 11-digit Nigerian mobile number'),
       const SizedBox(height: BocSpace.sm),
       CoreAmountFields(
         input: amount,
@@ -470,16 +482,19 @@ class _BillPaymentFlowState extends ConsumerState<BillPaymentFlow> {
       const SizedBox(height: BocSpace.lg),
       PrimaryButton(
         label: 'Review',
-        onPressed: customerId.isNotEmpty && amount is ValidMoney
-            ? () => _go(
-                _Step.review,
-                () => _draft = BillPaymentDraft(
-                  billerId: biller.id,
-                  paymentItemId: item.id,
-                  customerId: customerId,
-                  amountNaira: amount.minorUnits,
-                ),
-              )
+        onPressed: customerIdValid && amount is ValidMoney
+            ? () {
+                if (phoneBiller && !isValidBillMobileNumber(customerId)) return;
+                _go(
+                  _Step.review,
+                  () => _draft = BillPaymentDraft(
+                    billerId: biller.id,
+                    paymentItemId: item.id,
+                    customerId: customerId,
+                    amountNaira: amount.minorUnits,
+                  ),
+                );
+              }
             : null,
       ),
     ];
