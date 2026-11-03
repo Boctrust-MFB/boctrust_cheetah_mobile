@@ -13,3 +13,5 @@ String notificationPreferencesKey(String userId) =>
     'boctrust.prefs.$userId.notifications';
 String accessibilityPreferencesKey(String userId) =>
     'boctrust.prefs.$userId.accessibility';
+String homeBalanceHiddenKey(String userId) =>
+    'boctrust.prefs.$userId.balance_hidden';
