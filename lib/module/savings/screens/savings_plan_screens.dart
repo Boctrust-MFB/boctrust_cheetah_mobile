@@ -838,27 +838,42 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
   String get _planKind =>
       widget.type == SavingsProductType.fixed ? 'deposit' : 'goal';
 
-  /// Why the SmartSave target does not fit the quote, or null when it does.
-  String? get _targetProblem {
-    final quote = _quote;
-    if (widget.type != SavingsProductType.smartSave || quote == null) {
+  /// Why the typed SmartSave [amount] cannot be the target, or null when it
+  /// fits. With a [quote] it is checked against that duration's terms;
+  /// without one, against the lowest opening deposit Core lists.
+  String? _targetError(String amount, [SavingsPlanQuote? quote]) {
+    if (quote != null) {
+      if (quote.acceptsTarget(amount)) return null;
+      final max = quote.maxAmount;
+      if (max != null && quote.exceedsMax(amount)) {
+        return "Your target can't be more than ${_naira(max)} for this "
+            'duration.';
+      }
+      return 'Your target must be above the ${_naira(quote.minAmount)} '
+          'opening deposit.';
+    }
+    final lowest = _product?.lowestMinAmount;
+    final typed = balanceToKobo(savingsPlanNaira(amount) ?? '');
+    if (lowest == null || typed == null) return null;
+    if (BigInt.parse(typed) > BigInt.parse(balanceToKobo(lowest)!)) {
       return null;
     }
-    if (quote.acceptsTarget(_draft.amount)) return null;
-    final max = quote.maxAmount;
-    if (max != null && quote.exceedsMax(_draft.amount)) {
-      return "Your target can't be more than ${_naira(max)} for this "
-          'duration. Go back to change it.';
-    }
-    return 'Your target must be above the ${_naira(quote.minAmount)} '
-        'opening deposit. Go back to change it.';
+    return 'Your target must be above the opening deposit, which starts at '
+        '${_naira(lowest)}.';
   }
 
   bool get _stepValid => switch (_step) {
     _ when _createsInCore && _product == null => false,
-    _WizardStep.goal => _draft.name.trim().isNotEmpty && _amountValid,
+    _WizardStep.goal =>
+      _draft.name.trim().isNotEmpty &&
+          _amountValid &&
+          (widget.type != SavingsProductType.smartSave ||
+              _targetError(_draft.amount) == null),
     _WizardStep.amount => _amountValid,
-    _WizardStep.schedule => _quote != null && _targetProblem == null,
+    _WizardStep.schedule =>
+      _quote != null &&
+          (widget.type != SavingsProductType.smartSave ||
+              _targetError(_draft.amount, _quote) == null),
     _WizardStep.days when _createsInCore =>
       _draft.frequency != null &&
           periodicSavingsAmountValid(_draft.recurringAmount),
@@ -1265,7 +1280,6 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
       onAction: () => ref.invalidate(savingsPlanQuoteProvider(key)),
     );
     final quote = _quote;
-    final problem = _targetProblem;
     return [
       const SizedBox(height: BocSpace.md),
       switch (state) {
@@ -1280,18 +1294,6 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
         AsyncData(:final value) => refused(value.message),
         _ => refused(null),
       },
-      if (problem != null) ...[
-        const SizedBox(height: BocSpace.xs),
-        Semantics(
-          liveRegion: true,
-          child: Text(
-            problem,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: context.bocColors.errorText,
-            ),
-          ),
-        ),
-      ],
     ];
   }
 
@@ -1327,13 +1329,17 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
     ];
   }
 
-  Widget _amountField(String label) => AppTextField(
+  /// [validateNow] shows the error before the first edit; an edited field
+  /// re-runs its validator on every rebuild, so a new quote is reflected.
+  Widget _amountField(String label, {bool validateNow = false}) => AppTextField(
     label: label,
     controller: _amount,
     hintText: '₦0.00',
     keyboardType: const TextInputType.numberWithOptions(decimal: true),
     inputFormatters: [ThousandsAmountFormatter()],
-    autovalidateMode: AutovalidateMode.onUserInteraction,
+    autovalidateMode: validateNow
+        ? AutovalidateMode.always
+        : AutovalidateMode.onUserInteraction,
     validator: (value) {
       final amount = value ?? '';
       if (savingsPlanNaira(amount) == null) {
@@ -1349,6 +1355,9 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
           return 'The least you can lock for this term is '
               '${_naira(quote.minAmount)}.';
         }
+      }
+      if (widget.type == SavingsProductType.smartSave) {
+        return _targetError(amount, quote);
       }
       if (widget.type == SavingsProductType.padi &&
           !periodicSavingsAmountValid(amount)) {
@@ -1376,11 +1385,12 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
             const SizedBox(height: BocSpace.md),
             SavingsCallout(
               icon: IconsaxPlusLinear.wallet_2,
-              title: 'Minimum opening balance: from ${_naira(lowest)}',
+              title: 'Opening deposit starts at ${_naira(lowest)}',
               body:
-                  'When you create this goal, we move its minimum opening '
-                  'balance from Boc Flex Savings. The exact amount depends '
-                  'on how long you save, and your target must be above it.',
+                  'When you create this goal, we move its opening deposit '
+                  'from Boc Flex Savings. Your target must be greater than '
+                  'the opening deposit; the exact deposit depends on '
+                  'duration.',
             ),
           ],
         ];
@@ -1461,6 +1471,8 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
             ),
           ..._quoteSection(theme),
           if (widget.type == SavingsProductType.smartSave) ...[
+            const SizedBox(height: BocSpace.md),
+            _amountField('Target amount', validateNow: true),
             const SizedBox(height: BocSpace.md),
             SettingsGroup(
               padding: EdgeInsets.zero,
