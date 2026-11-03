@@ -335,6 +335,16 @@ extension HomeScreenParts on FlowPageState {
           onAction: retry,
         ),
         const SizedBox(height: 14),
+      ] else if (flex.availableBalance == null && !source.isLoading) ...[
+        // Core listed the account but returned no balance for it.
+        ApiStateCard(
+          title: 'Balance unavailable',
+          message: "We couldn't get your balance right now.",
+          tone: ApiStateTone.warning,
+          actionLabel: 'Retry',
+          onAction: retry,
+        ),
+        const SizedBox(height: 14),
       ],
       _flexWalletCard(flex, loading: source.isLoading),
       if (flex.frozenAccountNumber case final frozen?)
