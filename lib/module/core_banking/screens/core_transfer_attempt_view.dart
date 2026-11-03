@@ -304,8 +304,11 @@ class _CoreTransferAttemptViewState
           CoreLiveState.failed => (
             BocStatusKind.failed,
             'Transfer failed',
-            'This transfer did not go through. If your balance changed, '
-                'contact support with the reference below.',
+            reference != null
+                ? 'This transfer did not go through. If your balance changed, '
+                      'contact support with the reference below.'
+                : 'This transfer did not go through. If your balance changed, '
+                      'contact support with the amount, date and recipient.',
           ),
           CoreLiveState.reversed => (
             BocStatusKind.failed,
