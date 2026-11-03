@@ -16,6 +16,11 @@ import 'support/responsive_fixtures.dart';
 import 'support/savings_fixtures.dart';
 import 'package:boctrust_savings_loan/module/onboarding/provider/auth_session_provider.dart';
 
+class _VisibleBalances extends HomeBalanceHiddenNotifier {
+  @override
+  bool build() => false;
+}
+
 void main() {
   testWidgets('funding detail values start in one column', (tester) async {
     tester.view.physicalSize = const Size(360, 800);
@@ -66,6 +71,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          homeBalanceHiddenProvider.overrideWith(_VisibleBalances.new),
           sharedPreferencesProvider.overrideWithValue(preferences),
           dioProvider.overrideWithValue(dio),
           authSessionProvider.overrideWith(SavingsSession.new),

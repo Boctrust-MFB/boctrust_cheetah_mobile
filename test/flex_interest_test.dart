@@ -14,6 +14,11 @@ import 'support/flow_harness.dart';
 import 'support/responsive_fixtures.dart';
 import 'support/savings_fixtures.dart';
 
+class _VisibleBalances extends HomeBalanceHiddenNotifier {
+  @override
+  bool build() => false;
+}
+
 class _Interest extends CoreFlexInterestService {
   const _Interest(this.result) : super(null);
   final NotifierState<FlexInterest> result;
@@ -50,6 +55,7 @@ Future<void> _open(
     tester,
     route: AppRoutes.flexSave,
     overrides: [
+      homeBalanceHiddenProvider.overrideWith(_VisibleBalances.new),
       authSessionProvider.overrideWith(SavingsSession.new),
       userProfileProvider.overrideWith(LayoutProfile.new),
       coreFlexInterestServiceProvider.overrideWithValue(_Interest(result)),

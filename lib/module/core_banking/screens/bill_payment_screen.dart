@@ -469,7 +469,9 @@ class _BillPaymentFlowState extends ConsumerState<BillPaymentFlow> {
             : null,
         onChanged: (_) => _go(_Step.details),
       ),
-      if (phoneBiller && customerId.isNotEmpty && !customerIdValid)
+      if (phoneBiller &&
+          !customerIdValid &&
+          (customerId.length >= 11 || customerId.contains(RegExp(r'[^0-9]'))))
         const FieldError('Enter an 11-digit Nigerian mobile number'),
       const SizedBox(height: BocSpace.sm),
       CoreAmountFields(

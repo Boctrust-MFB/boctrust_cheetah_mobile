@@ -7,12 +7,18 @@ import 'package:boctrust_savings_loan/module/core_banking/model/core_account_tra
 import 'package:boctrust_savings_loan/module/core_banking/model/core_page.dart';
 import 'package:boctrust_savings_loan/module/core_banking/model/customer_bank_account_models.dart';
 import 'package:boctrust_savings_loan/module/core_banking/service/core_account_service.dart';
+import 'package:boctrust_savings_loan/module/home/provider/home_provider.dart';
 import 'package:boctrust_savings_loan/module/onboarding/provider/auth_session_provider.dart';
 import 'package:flutter/material.dart' show ListView;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/flow_harness.dart';
 import 'support/savings_fixtures.dart';
+
+class _VisibleBalances extends HomeBalanceHiddenNotifier {
+  @override
+  bool build() => false;
+}
 
 class _Accounts extends CoreAccountService {
   _Accounts([this.pages = const [[]]]) : super(null);
@@ -84,6 +90,7 @@ Future<void> _pumpDetail(WidgetTester tester, _Accounts accounts) async {
     route: AppRoutes.bankAccountDetail,
     arguments: const AppRouteArguments(entityId: '1100919408'),
     overrides: [
+      homeBalanceHiddenProvider.overrideWith(_VisibleBalances.new),
       authSessionProvider.overrideWith(SavingsSession.new),
       coreAccountServiceProvider.overrideWithValue(accounts),
       featureAvailabilityProvider(

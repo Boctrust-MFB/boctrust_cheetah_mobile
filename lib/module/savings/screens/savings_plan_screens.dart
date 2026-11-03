@@ -868,7 +868,7 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
       _draft.name.trim().isNotEmpty &&
           _amountValid &&
           (widget.type != SavingsProductType.smartSave ||
-              _targetError(_draft.amount) == null),
+              _targetError(_draft.amount, _quote) == null),
     _WizardStep.amount => _amountValid,
     _WizardStep.schedule =>
       _quote != null &&

@@ -129,6 +129,11 @@ class _HiddenBalance extends HomeBalanceHiddenNotifier {
   bool build() => true;
 }
 
+class _VisibleBalances extends HomeBalanceHiddenNotifier {
+  @override
+  bool build() => false;
+}
+
 class _Transactions extends CoreAccountService {
   _Transactions({this.reversed = false}) : super(null);
 
@@ -198,7 +203,9 @@ Future<void> _pump(
         ).overrideWithValue(FeatureAvailability.available),
       if (accountService != null)
         coreAccountServiceProvider.overrideWithValue(accountService),
-      if (hidden) homeBalanceHiddenProvider.overrideWith(_HiddenBalance.new),
+      homeBalanceHiddenProvider.overrideWith(
+        hidden ? _HiddenBalance.new : _VisibleBalances.new,
+      ),
       userProfileProvider.overrideWith(LayoutProfile.new),
       userHomeProvider.overrideWith(
         loadingHome

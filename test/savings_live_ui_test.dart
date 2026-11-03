@@ -5,6 +5,7 @@ import 'package:boctrust_savings_loan/app/network.dart';
 import 'package:boctrust_savings_loan/app/preferences.dart';
 import 'package:boctrust_savings_loan/app/theme.dart';
 import 'package:boctrust_savings_loan/module/account/provider/user_providers.dart';
+import 'package:boctrust_savings_loan/module/home/provider/home_provider.dart';
 import 'package:boctrust_savings_loan/module/onboarding/provider/auth_session_provider.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +17,11 @@ import 'package:boctrust_savings_loan/app/app_router.dart';
 import 'support/flow_harness.dart';
 import 'support/responsive_fixtures.dart';
 import 'support/savings_fixtures.dart';
+
+class _VisibleBalances extends HomeBalanceHiddenNotifier {
+  @override
+  bool build() => false;
+}
 
 /// A Dio on [baseUrl] that authenticates like production and answers every
 /// request from [respond].
@@ -139,6 +145,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          homeBalanceHiddenProvider.overrideWith(_VisibleBalances.new),
           sharedPreferencesProvider.overrideWithValue(prefs),
           authSessionProvider.overrideWith(SavingsSession.new),
           userProfileProvider.overrideWith(LayoutProfile.new),

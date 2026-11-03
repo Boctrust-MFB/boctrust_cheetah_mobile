@@ -183,8 +183,8 @@ class CoreSubmissionResult extends StatelessWidget {
                     ? 'This $lower did not go through. If your balance '
                           'changed, contact support with the reference below.'
                     : 'This $lower did not go through. If your balance '
-                          'changed, contact support with the amount, date '
-                          'and recipient.',
+                          'changed, contact support with the amount and date '
+                          'of this $lower.',
               ),
               CoreAckOutcome.processing => (
                 kind: BocStatusKind.pending,

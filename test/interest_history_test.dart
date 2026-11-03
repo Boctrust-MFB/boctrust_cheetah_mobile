@@ -8,6 +8,7 @@ import 'package:boctrust_savings_loan/app/route_arguments.dart';
 import 'package:boctrust_savings_loan/app/services.dart';
 import 'package:boctrust_savings_loan/module/app_flow/app_ui.dart';
 import 'package:boctrust_savings_loan/module/core_banking/model/core_page.dart';
+import 'package:boctrust_savings_loan/module/home/provider/home_provider.dart';
 import 'package:boctrust_savings_loan/module/onboarding/provider/auth_session_provider.dart';
 import 'package:boctrust_savings_loan/module/savings/model/interest_accrual_models.dart';
 import 'package:boctrust_savings_loan/module/savings/service/core_flex_interest_service.dart';
@@ -18,6 +19,11 @@ import 'package:flutter/material.dart' show Text;
 
 import 'support/flow_harness.dart';
 import 'support/savings_fixtures.dart';
+
+class _VisibleBalances extends HomeBalanceHiddenNotifier {
+  @override
+  bool build() => false;
+}
 
 class _Core implements HttpClientAdapter {
   final requests = <RequestOptions>[];
@@ -117,6 +123,7 @@ void main() {
       tester,
       route: AppRoutes.interestHistory,
       overrides: [
+        homeBalanceHiddenProvider.overrideWith(_VisibleBalances.new),
         authSessionProvider.overrideWith(SavingsSession.new),
         featureAvailabilityProvider(
           FeatureCapability.flexInterestView,

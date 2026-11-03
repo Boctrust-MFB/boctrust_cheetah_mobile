@@ -52,6 +52,11 @@ class _HiddenBalances extends HomeBalanceHiddenNotifier {
   bool build() => true;
 }
 
+class _VisibleBalances extends HomeBalanceHiddenNotifier {
+  @override
+  bool build() => false;
+}
+
 final _funded = <(String, String)>[];
 final _opened = <String>[];
 final _createdRequests = <CreateSavingsPlanRequest>[];
@@ -123,7 +128,9 @@ class _Plans extends CoreSavingsPlanService {
         startDate: today,
         endDate: endDate ?? DateTime(today.year, today.month, today.day + days),
         interestRatePercent: smartSave ? '8' : '10',
-        minAmount: smartSave ? '5000.00' : '1000.00',
+        minAmount: smartSave
+            ? (days >= 365 ? '8000.00' : '5000.00')
+            : '1000.00',
         earlyWithdrawalFeePercent: '10',
       ),
     );
@@ -274,7 +281,9 @@ Future<void> _open(
         featureAvailabilityProvider(
           FeatureCapability.fixedDepositCreate,
         ).overrideWithValue(FeatureAvailability.available),
-      if (hidden) homeBalanceHiddenProvider.overrideWith(_HiddenBalances.new),
+      homeBalanceHiddenProvider.overrideWith(
+        hidden ? _HiddenBalances.new : _VisibleBalances.new,
+      ),
       userHomeProvider.overrideWith(LayoutHome.new),
       customerBankAccountsProvider.overrideWith(_SmartSaveAccounts.new),
       coreBankProductsProvider.overrideWith(LayoutCoreProducts.new),
@@ -530,28 +539,34 @@ void main() {
       create: true,
     );
 
-    const problem =
-        'Your target must be above the ₦5,000.00 opening deposit. '
-        'Go back to change it.';
+    const goalProblem =
+        'Your target must be above the opening deposit, which starts at '
+        '₦5,000.00.';
+    const problem = 'Your target must be above the ₦8,000.00 opening deposit.';
     await tester.enterText(find.byType(TextField).at(0), 'Rent');
     await tester.enterText(find.byType(TextField).at(1), '5,000');
     await tester.pump();
-    await tester.tap(find.text('Continue'));
-    await tester.pump();
-    await tester.tap(find.text('6 months'));
-    await tester.pump();
-    await tester.pump();
-    expect(find.text(problem), findsOneWidget);
+    expect(find.text(goalProblem), findsOneWidget);
     expect(
       tester.widget<PrimaryButton>(find.byType(PrimaryButton)).onPressed,
       isNull,
     );
 
-    await tester.tap(find.bySemanticsLabel('Back'));
-    await tester.pump();
     await tester.enterText(find.byType(TextField).at(1), '5,000.01');
     await tester.pump();
     await tester.tap(find.text('Continue'));
+    await tester.pump();
+    await tester.tap(find.text('12 months'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text(problem), findsOneWidget);
+    expect(find.textContaining('Go back to change it.'), findsNothing);
+    expect(
+      tester.widget<PrimaryButton>(find.byType(PrimaryButton)).onPressed,
+      isNull,
+    );
+
+    await tester.enterText(find.byType(TextField).first, '8,000.01');
     await tester.pump();
     expect(find.text(problem), findsNothing);
     expect(
