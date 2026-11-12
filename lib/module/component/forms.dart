@@ -6,7 +6,7 @@ class AppTextField extends StatelessWidget {
     this.controller,
     this.initialValue,
     this.hintText,
-    this.keyboardType,
+    this.keyboardType = TextInputType.text,
     this.obscureText = false,
     this.maxLines = 1,
     this.onChanged,
@@ -25,7 +25,7 @@ class AppTextField extends StatelessWidget {
   final TextEditingController? controller;
   final String? initialValue;
   final String? hintText;
-  final TextInputType? keyboardType;
+  final TextInputType keyboardType;
   final bool obscureText;
   final int maxLines;
   final ValueChanged<String>? onChanged;

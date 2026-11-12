@@ -13,16 +13,23 @@ class _CapturingOutput extends LogOutput {
 void main() {
   late _CapturingOutput output;
   late LoggingInterceptor interceptor;
+  // Staging logs everything verbatim; redaction is production-only.
+  late LoggingInterceptor production;
 
   setUp(() {
     output = _CapturingOutput();
+    Logger logger() => Logger(
+      filter: ProductionFilter(),
+      printer: SimplePrinter(printTime: false, colors: false),
+      output: output,
+    );
     interceptor = LoggingInterceptor(
       includeSensitiveData: true,
-      logger: Logger(
-        filter: ProductionFilter(),
-        printer: SimplePrinter(printTime: false, colors: false),
-        output: output,
-      ),
+      logger: logger(),
+    );
+    production = LoggingInterceptor(
+      includeSensitiveData: false,
+      logger: logger(),
     );
   });
 
@@ -42,7 +49,7 @@ void main() {
     // behave identically. Before this, documentNumberLast4 was redacted only
     // because "documentnumber" is a substring of it, while identityLast4 was
     // visible because "identitynumber" is not.
-    interceptor.onResponse(
+    production.onResponse(
       Response<Object?>(
         requestOptions: RequestOptions(path: '/users/me/kyc/status'),
         data: {
@@ -92,14 +99,14 @@ void main() {
     expect(production.lines.join(), isNot(contains('12345678901')));
   });
 
-  test('credentials are redacted even in staging, unlike OTPs', () {
+  test('credentials are redacted in production', () {
     // Found by reading a real Android emulator logcat: a failed login had
     // written the plaintext password. A tester never needs to read back a
     // credential they just typed, and unlike an OTP a password is long-lived
     // and commonly reused, so it is redacted in every environment.
     // The leak was seen on the error path, which logs requestBody through the
     // same _visible call this exercises.
-    interceptor.onRequest(
+    production.onRequest(
       RequestOptions(
         path: '/auth/login',
         data: {
@@ -118,8 +125,6 @@ void main() {
     expect(logged, isNot(contains('Sup3rSecret!')));
     expect(logged, isNot(contains('8888')));
     expect(logged, isNot(contains('7777')));
-    // The staging affordance is untouched.
-    expect(logged, contains('123456'));
   });
 
   test('prose and status flags survive, only payload strings are scanned', () {
@@ -127,7 +132,7 @@ void main() {
     // A message merely mentioning a protected word vanished, and boolean
     // onboarding flags were redacted because their key names contain
     // "password" and "pin" — destroying the fields logs are read for.
-    interceptor.onResponse(
+    production.onResponse(
       Response<Object?>(
         requestOptions: RequestOptions(path: '/auth/password/forgot'),
         data: {
@@ -152,7 +157,7 @@ void main() {
     // Iterable only, so a JSON-encoded string field printed every value inside
     // it verbatim. httpbin-style echo endpoints and any stringified upstream
     // body hit this.
-    interceptor.onResponse(
+    production.onResponse(
       Response<Object?>(
         requestOptions: RequestOptions(path: '/echo'),
         data: {
@@ -180,43 +185,33 @@ void main() {
     expect(logged, contains('123456'));
   });
 
-  test(
-    'never-log values are redacted even when sensitive data is included',
-    () {
-      interceptor.onResponse(
-        Response<Object?>(
-          requestOptions: RequestOptions(
-            path: '/users/me/kyc/government-id/initiate',
-          ),
-          data: {
-            'accountNumber': '0123456789',
-            'auth_token': 'smile-auth-token',
-            'partner_id': 'partner-test',
-            'identityNumber': '12345678901',
-            'documentNumber': 'AB1234567',
-            'callbackUrl': 'https://user.example.test/hook?signature=secret',
-          },
+  test('never-log values are redacted in production', () {
+    production.onResponse(
+      Response<Object?>(
+        requestOptions: RequestOptions(
+          path: '/users/me/kyc/government-id/initiate',
         ),
-        ResponseInterceptorHandler(),
-      );
-      final logged = output.lines.join();
-      for (final secret in [
-        'smile-auth-token',
-        'partner-test',
-        'AB1234567',
-        'signature=secret',
-      ]) {
-        expect(logged, isNot(contains(secret)));
-      }
-      // identityNumber is deliberately absent from this list: it is
-      // environment-gated rather than always-redacted while the Biometric KYC
-      // flow is built, so staging shows it. The staging/production split has
-      // its own test above.
-      expect(logged, contains('12345678901'));
-      // Account numbers are likewise environment-gated until launch.
-      expect(logged, contains('0123456789'));
-    },
-  );
+        data: {
+          'accountNumber': '0123456789',
+          'auth_token': 'smile-auth-token',
+          'partner_id': 'partner-test',
+          'identityNumber': '12345678901',
+          'documentNumber': 'AB1234567',
+          'callbackUrl': 'https://user.example.test/hook?signature=secret',
+        },
+      ),
+      ResponseInterceptorHandler(),
+    );
+    final logged = output.lines.join();
+    for (final secret in [
+      'smile-auth-token',
+      'partner-test',
+      'AB1234567',
+      'signature=secret',
+    ]) {
+      expect(logged, isNot(contains(secret)));
+    }
+  });
 
   test('Core customer IDs are visible in staging, redacted in production', () {
     RequestOptions bill() => RequestOptions(
@@ -283,7 +278,7 @@ void main() {
         'apiLogger.privacySensitivePath': '/accounts/{accountNumber}/enquiry',
       },
     );
-    interceptor.onResponse(
+    production.onResponse(
       Response<Object?>(
         requestOptions: request,
         statusCode: 200,
@@ -296,7 +291,7 @@ void main() {
       ),
       ResponseInterceptorHandler(),
     );
-    interceptor.onError(
+    production.onError(
       DioException(
         requestOptions: request,
         message: 'Account 1100037777 has balance 42000.00',
@@ -324,22 +319,25 @@ void main() {
     }
   });
 
-  group('a credential-bearing request', () {
+  group('in production, a credential-bearing request', () {
     // Prints everything Logger receives, including error and stack trace,
     // so nothing the interceptor hands over can hide from the assertion.
     late List<String> emitted;
     late LoggingInterceptor staging;
+    late LoggingInterceptor production;
 
     setUp(() {
       emitted = [];
-      staging = LoggingInterceptor(
-        includeSensitiveData: true,
+      LoggingInterceptor build({required bool sensitive}) => LoggingInterceptor(
+        includeSensitiveData: sensitive,
         logger: Logger(
           filter: ProductionFilter(),
           printer: _EverythingPrinter(emitted),
           output: _CapturingOutput(),
         ),
       );
+      staging = build(sensitive: true);
+      production = build(sensitive: false);
     });
 
     RequestOptions transfer() => RequestOptions(
@@ -353,13 +351,13 @@ void main() {
     );
 
     test('keeps the PIN out of a structured request body', () {
-      staging.onRequest(transfer(), RequestInterceptorHandler());
+      production.onRequest(transfer(), RequestInterceptorHandler());
       expect(emitted.join(), isNot(contains('0007')));
     });
 
-    test('never logs a raw error message, error or stack trace in staging', () {
+    test('never logs a raw error message, error or stack trace', () {
       final request = transfer();
-      staging.onError(
+      production.onError(
         DioException(
           requestOptions: request,
           message: 'Bad PIN 0007 for transfer',
@@ -380,7 +378,7 @@ void main() {
 
     test('masks a PIN the server echoes in a response', () {
       final request = transfer();
-      staging.onResponse(
+      production.onResponse(
         Response<Object?>(
           requestOptions: request,
           statusCode: 200,

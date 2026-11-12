@@ -25,6 +25,7 @@ class TransactionReconfirmation extends Equatable {
     required this.expiresAt,
     this.validUntil,
     this.dojahReference,
+    this.bvn,
   });
 
   factory TransactionReconfirmation.fromJson(Object? json) {
@@ -55,6 +56,7 @@ class TransactionReconfirmation extends Equatable {
       throw const FormatException('Reconfirmation has no valid expiry.');
     }
     final metadata = json['metadata'];
+    final sdkData = json['sdkData'];
     return TransactionReconfirmation(
       verificationId: verificationId,
       status: status,
@@ -63,6 +65,9 @@ class TransactionReconfirmation extends Equatable {
       expiresAt: expiresAt,
       validUntil: _time(json['validUntil']),
       dojahReference: metadata is Map ? _text(metadata['reference']) : null,
+      bvn: sdkData is Map && sdkData['identityType'] == 'bvn'
+          ? _text(sdkData['identityNumber'])
+          : null,
     );
   }
 
@@ -75,6 +80,11 @@ class TransactionReconfirmation extends Equatable {
 
   /// The Dojah capture nonce; present only while the challenge is pending.
   final String? dojahReference;
+
+  /// The customer's BVN, which Dojah's liveness step needs prefilled; present
+  /// only while the challenge is pending. Left out of [props] so it never
+  /// reaches a log.
+  final String? bvn;
 
   /// Whether this proves [reference] for finalize at [now].
   bool provesTransfer(String reference, DateTime now) =>

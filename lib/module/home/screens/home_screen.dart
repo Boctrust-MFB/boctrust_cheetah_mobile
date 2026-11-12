@@ -107,35 +107,29 @@ extension HomeScreenParts on FlowPageState {
       ],
       body: RefreshIndicator(
         onRefresh: () async {
+          final accountNumber = accountsState.data?.flexAccount?.accountNumber;
           await Future.wait([
             ref.read(userProfileProvider.notifier).load(),
             ref.read(userTierProvider.notifier).load(),
             ref.read(userHomeProvider.notifier).load(),
             ref.read(customerBankAccountsProvider.notifier).load(),
-          ]);
-          if (!mounted) return;
-          final accountNumber = ref
-              .read(customerBankAccountsProvider)
-              .data
-              ?.flexAccount
-              ?.accountNumber;
-          if (accountNumber != null &&
+            if (accountNumber != null &&
+                ref
+                    .read(
+                      featureAvailabilityProvider(
+                        FeatureCapability.coreAccountHistory,
+                      ),
+                    )
+                    .isAvailable)
               ref
                   .read(
-                    featureAvailabilityProvider(
-                      FeatureCapability.coreAccountHistory,
-                    ),
+                    coreAccountHistoryProvider((
+                      accountNumber: accountNumber,
+                      range: CoreHistoryRange.last30Days,
+                    )).notifier,
                   )
-                  .isAvailable) {
-            await ref
-                .read(
-                  coreAccountHistoryProvider((
-                    accountNumber: accountNumber,
-                    range: CoreHistoryRange.last30Days,
-                  )).notifier,
-                )
-                .reload();
-          }
+                  .reload(),
+          ]);
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),

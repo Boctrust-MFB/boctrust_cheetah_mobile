@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iconsax_plus/iconsax_plus.dart';
 import 'package:intl/intl.dart' show DateFormat;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/app_router.dart';
 import '../../../app/auth_navigation_provider.dart';
@@ -119,6 +120,20 @@ class _AccountPageState extends FlowPageState<AccountScreen> {
     AuthDestination destination, {
     AuthNavigationMode mode = AuthNavigationMode.push,
   }) => openAuthDestination(ref, destination, mode: mode);
+
+  Future<void> _openSupportContact(Uri uri, String failureMessage) async {
+    var opened = false;
+    try {
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      // A device may have no app registered for phone or email links.
+    }
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(failureMessage)));
+    }
+  }
 
   @override
   Widget build(BuildContext context) => popScope(switch (widget._page) {
@@ -318,9 +333,15 @@ extension _AccountScreens on _AccountPageState {
                 SettingsTile(
                   icon: IconsaxPlusLinear.shield_tick,
                   title: 'Account tier',
-                  subtitle: 'Tier ${profile?.tier ?? '—'} · View limits',
+                  subtitle: 'Tier ${profile?.tier ?? '—'} · Verification details',
                   onTap: () =>
                       Navigator.of(context).pushNamed(AppRoutes.tierOverview),
+                ),
+                SettingsTile(
+                  icon: IconsaxPlusLinear.chart_2,
+                  title: 'Transaction limits',
+                  subtitle: 'View transfer and bill payment limits',
+                  onTap: () => go(AppRoutes.transactionLimits),
                 ),
                 SettingsTile(
                   icon: IconsaxPlusLinear.document_text,
@@ -358,15 +379,23 @@ extension _AccountScreens on _AccountPageState {
             SettingsGroup(
               caption: 'Support',
               children: [
-                const SettingsTile(
+                SettingsTile(
                   icon: IconsaxPlusLinear.call,
                   title: 'Call customer care',
                   subtitle: '09064641439',
+                  onTap: () => _openSupportContact(
+                    Uri(scheme: 'tel', path: '09064641439'),
+                    'Unable to open your phone app.',
+                  ),
                 ),
-                const SettingsTile(
+                SettingsTile(
                   icon: IconsaxPlusLinear.sms,
                   title: 'Email support',
                   subtitle: 'enquiries@boctrustmfb.com',
+                  onTap: () => _openSupportContact(
+                    Uri(scheme: 'mailto', path: 'enquiries@boctrustmfb.com'),
+                    'Unable to open your email app.',
+                  ),
                 ),
                 SettingsTile(
                   icon: IconsaxPlusLinear.shield_security,

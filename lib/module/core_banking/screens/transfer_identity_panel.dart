@@ -158,6 +158,7 @@ class _TransferIdentityPanelState extends ConsumerState<TransferIdentityPanel> {
             widgetId: widgetId,
             referenceId: challenge.dojahReference!,
             operation: KycOperation.identity,
+            bvn: challenge.bvn,
             email: email,
           ),
         ),

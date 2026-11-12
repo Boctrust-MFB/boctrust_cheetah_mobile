@@ -17,9 +17,8 @@ class LoggingInterceptor extends Interceptor {
   static const _requestStartedAtKey = 'apiLogger.requestStartedAt';
 
   /// A safe path template for requests whose real path or body must never be
-  /// logged, including in staging (the one exception is `/me/bank-accounts`
-  /// replies, which staging logs verbatim; see [_rawResponse]). Its presence also suppresses request and
-  /// response payloads and raw exception details.
+  /// logged in production. Its presence also suppresses request and response
+  /// payloads and raw exception details there. Staging logs everything.
   static const privacySensitivePathKey = 'apiLogger.privacySensitivePath';
   static const _sensitiveKeyParts = <String>{
     'authorization',
@@ -49,6 +48,8 @@ class LoggingInterceptor extends Interceptor {
     'customerid',
   };
 
+  /// Staging only: when true nothing is redacted, including PINs, passwords,
+  /// tokens and privacy-sensitive paths. Production keeps every redaction.
   final bool includeSensitiveData;
   final Logger _logger;
 
@@ -64,7 +65,7 @@ class LoggingInterceptor extends Interceptor {
         'headers': _visible(options.headers),
         'body': _visibleForRequest(options, options.data),
         'extra': _visible(_requestExtra(options)),
-      }, _credentialValues(options.data)),
+      }, _credentialsToMask(options.data)),
     );
     handler.next(options);
   }
@@ -83,7 +84,7 @@ class LoggingInterceptor extends Interceptor {
             'durationMs': _durationMilliseconds(request),
             // 'headers': _visible(response.headers.map),
             if (!raw) 'body': _visibleForRequest(request, response.data),
-          }, _credentialValues(request.data))
+          }, _credentialsToMask(request.data))
           as Map),
       if (raw) 'body': response.data,
     });
@@ -93,11 +94,11 @@ class LoggingInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     final request = err.requestOptions;
-    final credentials = _credentialValues(request.data);
+    final credentials = _credentialsToMask(request.data);
     // A request carrying a PIN or password never hands Logger the raw
     // exception, in any environment: its message, error or stack trace can
     // echo the credential as plain text that key-based redaction cannot see.
-    final privacySensitive = _privacySafePath(request) != null;
+    final privacySensitive = _privacyPath(request) != null;
     final raw =
         includeSensitiveData && credentials.isEmpty && !privacySensitive;
     final rawResponse = _rawResponse(request);
@@ -128,6 +129,9 @@ class LoggingInterceptor extends Interceptor {
     );
     handler.next(err);
   }
+
+  Set<String> _credentialsToMask(Object? body) =>
+      includeSensitiveData ? const {} : _credentialValues(body);
 
   /// Keys whose values are credentials a customer typed.
   static const _credentialKeyParts = {'password', 'pin'};
@@ -200,21 +204,19 @@ class LoggingInterceptor extends Interceptor {
     'resultjson',
   };
 
-  /// Every Core `/me/bank-accounts` reply (accounts, balances, account
-  /// transactions and summary, freeze and unfreeze, including the
-  /// staging-only `otpCode`) is logged verbatim in
-  /// staging by product decision. Production still redacts them, and request
-  /// bodies (PIN, code) stay redacted everywhere.
-  bool _rawResponse(RequestOptions request) =>
-      includeSensitiveData && _bankAccountsPath.hasMatch(request.uri.path);
+  /// Every reply is logged verbatim in staging. Production redacts.
+  bool _rawResponse(RequestOptions request) => includeSensitiveData;
 
-  static final _bankAccountsPath = RegExp(r'/me/bank-accounts(/|$)');
-
-  Object? _visible(Object? value) =>
-      _redact(value, includeSensitiveData: includeSensitiveData);
+  Object? _visible(Object? value) => includeSensitiveData
+      ? value
+      : _redact(value, includeSensitiveData: includeSensitiveData);
 
   Object? _visibleForRequest(RequestOptions request, Object? value) =>
-      _privacySafePath(request) == null ? _visible(value) : '[REDACTED]';
+      _privacyPath(request) == null ? _visible(value) : '[REDACTED]';
+
+  /// The privacy-safe path template, honoured in production only.
+  String? _privacyPath(RequestOptions request) =>
+      includeSensitiveData ? null : _privacySafePath(request);
 
   /// Normalized form used to match keys, and to scan serialized payloads.
   static String _normalize(Object? value) =>
@@ -295,8 +297,9 @@ class LoggingInterceptor extends Interceptor {
     return value;
   }
 
-  static String _urlForLog(RequestOptions options) {
+  String _urlForLog(RequestOptions options) {
     final uri = options.uri;
+    if (includeSensitiveData) return uri.toString();
     final template = _privacySafePath(options);
     // The template replaces only the request path; keep the base URL's path
     // (e.g. `/api/v1`) so the logged URL matches the one requested.

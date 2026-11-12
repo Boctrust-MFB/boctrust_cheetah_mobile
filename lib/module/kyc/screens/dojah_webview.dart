@@ -80,6 +80,7 @@ class _DojahWebViewState extends State<DojahWebView> {
               onNavigationRequest: _onNavigationRequest,
               onPageStarted: (url) => _pageUrl = url,
               onPageFinished: (url) {
+                if (kDebugMode) debugPrint('[DojahWebView] loaded: $url');
                 _pageUrl = url;
                 _loaded = true;
                 _stallTimer?.cancel();
@@ -96,6 +97,12 @@ class _DojahWebViewState extends State<DojahWebView> {
                 if (mounted) setState(() => _progress = progress);
               },
               onWebResourceError: (error) {
+                if (kDebugMode) {
+                  debugPrint(
+                    '[DojahWebView] error (main frame: ${error.isForMainFrame}): '
+                    '${error.errorCode} ${error.description} ${error.url}',
+                  );
+                }
                 if ((error.isForMainFrame ?? false) && mounted) {
                   setState(() => _failed = true);
                 }
@@ -111,6 +118,7 @@ class _DojahWebViewState extends State<DojahWebView> {
   /// The hosted flow reporting how it ended, so capture closes itself
   /// instead of waiting for the user to back out of a finished page.
   void _onOutcomeMessage(JavaScriptMessage message) {
+    if (kDebugMode) debugPrint('[DojahWebView] message: ${message.message}');
     if (_reported) return;
     final Object? decoded;
     try {
@@ -123,6 +131,7 @@ class _DojahWebViewState extends State<DojahWebView> {
     final origin = decoded['origin'];
     if (type is! String || origin is! String) return;
     final outcome = dojahWebOutcomeFor(type: type, origin: origin);
+    if (kDebugMode) debugPrint('[DojahWebView] outcome: ${outcome?.name}');
     if (outcome == null || !mounted) return;
     _reported = true;
     widget.onFinished(outcome);
@@ -137,7 +146,7 @@ class _DojahWebViewState extends State<DojahWebView> {
       final uri = Uri.tryParse(request.url);
       debugPrint(
         '[DojahWebView] main-frame ${decision.name}: '
-        '${uri == null ? '<unparsable>' : '${uri.scheme}://${uri.host}${uri.path}'}',
+        '${uri == null ? '<unparsable>' : uri.toString()}',
       );
     }
     switch (decision) {

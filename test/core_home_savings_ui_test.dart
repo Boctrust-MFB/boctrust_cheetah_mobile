@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:boctrust_savings_loan/app/services.dart';
 import 'package:boctrust_savings_loan/app/feature_capability.dart';
 import 'package:boctrust_savings_loan/module/account/provider/user_providers.dart';
@@ -93,6 +95,18 @@ class _Home extends LayoutHome {
   Future<NotifierState<UserHomeData>> load() async => state;
 }
 
+class _SlowHome extends LayoutHome {
+  _SlowHome(this.release);
+
+  final Completer<void> release;
+
+  @override
+  Future<NotifierState<UserHomeData>> load() async {
+    await release.future;
+    return state;
+  }
+}
+
 class _HomeWithProducts extends UserHomeNotifier {
   @override
   NotifierState<UserHomeData> build() => NotifierState.done(
@@ -165,6 +179,35 @@ class _Transactions extends CoreAccountService {
   );
 }
 
+class _RefreshingTransactions extends CoreAccountService {
+  _RefreshingTransactions() : super(null);
+
+  int reads = 0;
+
+  @override
+  Future<NotifierState<CoreTransactionPage>> getAccountTransactions(
+    String accountNumber,
+    CoreHistoryRange range, {
+    int page = 1,
+    int pageSize = 20,
+    DateTime? today,
+  }) async {
+    reads++;
+    return NotifierState.done(
+      CoreTransactionPage(
+        rows: [
+          CoreAccountTransaction(
+            id: 'txn-$reads',
+            type: CoreTransactionType.debit,
+            amount: '10.00',
+            narration: 'Refresh $reads',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _UnfreezeSpy extends AccountFreezeController {
   _UnfreezeSpy(super.accountNumber);
 
@@ -224,6 +267,50 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets(
+    'Home refresh updates recent transactions while overview is slow',
+    (tester) async {
+      final release = Completer<void>();
+      final transactions = _RefreshingTransactions();
+      tester.view.physicalSize = const Size(800, 2000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await pumpFlow(
+        tester,
+        route: AppRoutes.home,
+        overrides: [
+          authSessionProvider.overrideWith(SavingsSession.new),
+          userProfileProvider.overrideWith(LayoutProfile.new),
+          userTierProvider.overrideWith(LayoutTiers.new),
+          userHomeProvider.overrideWith(() => _SlowHome(release)),
+          customerBankAccountsProvider.overrideWith(
+            () => _Accounts(NotifierState.done(_accounts)),
+          ),
+          featureAvailabilityProvider(
+            FeatureCapability.coreAccountHistory,
+          ).overrideWithValue(FeatureAvailability.available),
+          coreAccountServiceProvider.overrideWithValue(transactions),
+        ],
+      );
+      await tester.pump();
+      expect(transactions.reads, 1);
+
+      final refresh = tester.state<RefreshIndicatorState>(
+        find.byType(RefreshIndicator).first,
+      );
+      final refreshing = refresh.show();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(transactions.reads, 2);
+      release.complete();
+      await tester.pumpAndSettle();
+      await refreshing;
+      expect(find.text('Refresh 2'), findsOneWidget);
+    },
+  );
+
   testWidgets('a frozen Flex account shows its label and banner, and Unfreeze '
       'opens the flow for that account', (tester) async {
     _UnfreezeSpy.otpRequests.clear();
