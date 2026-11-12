@@ -1191,6 +1191,10 @@ class _SavingsPlanWizardState extends ConsumerState<_SavingsPlanWizard> {
                 ),
                 Expanded(
                   child: ListView(
+                    // A fresh subtree per step: otherwise a field in the same
+                    // slot (Fixed's amount, then its name) keeps the focused
+                    // input and its number keyboard.
+                    key: ValueKey(_step),
                     padding: const EdgeInsets.all(BocSpace.gutter),
                     children: gate == null ? _stepBody(theme) : [gate],
                   ),
