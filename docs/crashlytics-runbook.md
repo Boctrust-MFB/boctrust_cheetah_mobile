@@ -30,10 +30,10 @@ Source: `lib/app/api_failure_classifier.dart`. Kinds: `nonfatal`, `breadcrumb` (
 | `DioExceptionType.cancel` | `cancel` | ignored |
 | `LocalSessionExpired` or `sessionExpiryHandled` (User 401) | `session_expired` | breadcrumb |
 | `connectionError` | `offline` | breadcrumb |
-| Connection, send or receive timeout | `timeout` | nonfatal (throttled) |
+| Connection, send or receive timeout | `timeout` | nonfatal |
 | Other `DioException` with no response | `transport` | nonfatal |
 | Core 401 | `core_401` | nonfatal |
-| 429 | `rate_429` | nonfatal (throttled) |
+| 429 | `rate_429` | nonfatal |
 | Any 5xx | `server_5xx` | nonfatal |
 | 4xx without a valid `{success:false}` envelope | `client_4xx_malformed` | nonfatal |
 | 4xx with a valid `{success:false}` envelope | `client_4xx` | breadcrumb |
@@ -62,7 +62,10 @@ Endpoint is always `signed_upload` (feature `kyc`, action `upload_kyc_document`)
 
 One non-fatal for navigation to an unregistered name. `/` is excluded (Flutter generates it beneath `/bootstrap` on cold start). The name is shown only if it matches `^/[a-z0-9-]{1,32}$`, otherwise `[unrecognized]`. Route arguments are never sent. The main source is the server-supplied `route` in push notifications.
 
-### Throttle (`lib/app/error_reporting.dart`)
+### Throttle (`lib/app/error_reporting.dart`, applied in `lib/app/firebase_error_reporter.dart`)
+
+- Applies only to non-fatals with origin `api` or `upload`, which covers every non-fatal row in the API and upload tables above except `parser`.
+- Not throttled, as the code stands today: origins `flutter`, `platform` and `routing`, and origin `parser` (that row is classified with origin `parser`, so it bypasses the throttle). Breadcrumbs are never throttled.
 
 - At most 1 non-fatal per group key per 10 minutes.
 - At most 4 API and upload non-fatals per session, to leave device-buffer room for Flutter, platform and routing events.
