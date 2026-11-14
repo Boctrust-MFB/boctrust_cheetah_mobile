@@ -532,7 +532,9 @@ class CoreTransferAttemptNotifier extends Notifier<CoreTransferAttemptState> {
       _settle(still, CoreRejection.identityFailed);
       return null;
     }
-    if (identity.provider == ReconfirmationProvider.smileId) {
+    // Only a reply naming Dojah goes on to Dojah capture and its sandbox
+    // BVN; any other provider stops here with no money moved.
+    if (identity.provider != ReconfirmationProvider.dojah) {
       _settle(still, CoreRejection.identityProviderUnsupported);
       return null;
     }

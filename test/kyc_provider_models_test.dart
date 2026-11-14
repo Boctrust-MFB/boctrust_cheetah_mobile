@@ -212,14 +212,30 @@ void main() {
 
     test('sandbox sends Dojah its test BVN instead of the entered one', () {
       expect(
-        dojahCaptureBvn('00000000006', environment: 'sandbox'),
+        dojahCaptureBvn(
+          '00000000006',
+          environment: 'sandbox',
+          sandboxBvnEnabled: true,
+        ),
         '22222222222',
       );
     });
 
-    test('live sends Dojah the entered BVN', () {
+    test('live or a disabled flag sends Dojah the entered BVN', () {
       expect(
-        dojahCaptureBvn('00000000006', environment: 'live'),
+        dojahCaptureBvn(
+          '00000000006',
+          environment: 'live',
+          sandboxBvnEnabled: true,
+        ),
+        '00000000006',
+      );
+      expect(
+        dojahCaptureBvn(
+          '00000000006',
+          environment: 'sandbox',
+          sandboxBvnEnabled: false,
+        ),
         '00000000006',
       );
     });

@@ -21,9 +21,11 @@ abstract final class Env {
     'DOJAH_GOVERNMENT_WIDGET_ID',
   );
 
-  static const dojahTransactionWidgetId = String.fromEnvironment(
-    'DOJAH_TRANSACTION_WIDGET_ID',
-  );
+  /// Sends Dojah its sandbox BVN in place of the customer's, for both the BVN
+  /// check and transfer liveness. Off unless `DOJAH_USE_SANDBOX_BVN=true`, and
+  /// never on outside staging, so a production build ignores the flag.
+  static const useDojahSandboxBvn =
+      bool.fromEnvironment('DOJAH_USE_SANDBOX_BVN') && environment == 'staging';
 
   static bool get isStaging => environment == 'staging';
   static bool get isProd => environment == 'prod';

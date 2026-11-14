@@ -25,9 +25,16 @@ class DojahConfig {
 /// sandbox attempts send this one instead of the BVN the user entered.
 const dojahSandboxBvn = '22222222222';
 
-/// The BVN to prefill into Dojah for an attempt in [environment].
-String dojahCaptureBvn(String enteredBvn, {required String? environment}) =>
-    environment == 'sandbox' ? dojahSandboxBvn : enteredBvn;
+/// The BVN to prefill into Dojah for an attempt in [environment]: the
+/// sandbox BVN only while [Env.useDojahSandboxBvn] is on and the attempt is
+/// in sandbox, otherwise the BVN the user entered.
+String dojahCaptureBvn(
+  String enteredBvn, {
+  required String? environment,
+  bool sandboxBvnEnabled = Env.useDojahSandboxBvn,
+}) => sandboxBvnEnabled && environment == 'sandbox'
+    ? dojahSandboxBvn
+    : enteredBvn;
 
 final dojahConfigProvider = Provider<DojahConfig>(
   (ref) => const DojahConfig(

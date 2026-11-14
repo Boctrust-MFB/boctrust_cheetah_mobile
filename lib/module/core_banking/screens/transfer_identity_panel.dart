@@ -7,6 +7,7 @@ import '../../../app/services.dart';
 import '../../../app/theme.dart';
 import '../../account/provider/user_providers.dart';
 import '../../app_flow/app_ui.dart';
+import '../../kyc/model/kyc_configuration_models.dart';
 import '../../kyc/model/kyc_provider_models.dart';
 import '../../kyc/screens/dojah_capture_screen.dart';
 import '../../kyc/service/dojah_config.dart';
@@ -108,11 +109,6 @@ class _TransferIdentityPanelState extends ConsumerState<TransferIdentityPanel> {
     _poll = null;
   }
 
-  String _transactionWidgetId() {
-    final id = Env.dojahTransactionWidgetId.trim();
-    return id.isNotEmpty ? id : ref.read(dojahConfigProvider).selfieWidgetId;
-  }
-
   void _setBusy(bool busy) {
     if (mounted && _busy != busy) setState(() => _busy = busy);
   }
@@ -129,7 +125,9 @@ class _TransferIdentityPanelState extends ConsumerState<TransferIdentityPanel> {
     // Held directly: this panel may be gone by the time a reply arrives.
     final notifier = ref.read(coreTransferAttemptProvider.notifier);
     final id = widget.attempt.id;
-    final widgetId = _transactionWidgetId().trim();
+    final widgetId = ref
+        .read(dojahConfigProvider)
+        .widgetIdFor(KycOperation.identity);
     final messenger = ScaffoldMessenger.of(context);
     if (widgetId.isEmpty) {
       notifier.cancelReview(id);
@@ -152,13 +150,25 @@ class _TransferIdentityPanelState extends ConsumerState<TransferIdentityPanel> {
       );
       if (challenge == null || !mounted) return;
       final email = ref.read(userProfileProvider).data?.email;
+      // startIdentity returns only a challenge whose reply named Dojah. The
+      // reply names no provider environment, but staging only ever accepts
+      // sandbox providers. DOJAH_USE_SANDBOX_BVN decides, as it does for the
+      // BVN check.
+      final bvn = challenge.bvn;
       final outcome = await Navigator.of(context).push<KycCaptureOutcome>(
         MaterialPageRoute(
           builder: (_) => DojahCaptureScreen(
             widgetId: widgetId,
             referenceId: challenge.dojahReference!,
             operation: KycOperation.identity,
-            bvn: challenge.bvn,
+            bvn: bvn == null
+                ? null
+                : dojahCaptureBvn(
+                    bvn,
+                    environment: Env.isStaging
+                        ? KycProviderEnvironment.sandbox.wireValue
+                        : null,
+                  ),
             email: email,
           ),
         ),
