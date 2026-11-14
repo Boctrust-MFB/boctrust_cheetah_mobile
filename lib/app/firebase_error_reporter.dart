@@ -65,7 +65,9 @@ class FirebaseErrorReporter implements AppErrorReporter {
       var e = event.copyWith(route: event.route ?? _context.lastRoute);
       var send = e.kind == ErrorKind.nonfatal;
       if (send &&
-          (e.origin == ErrorOrigin.api || e.origin == ErrorOrigin.upload) &&
+          (e.origin == ErrorOrigin.api ||
+              e.origin == ErrorOrigin.upload ||
+              e.origin == ErrorOrigin.parser) &&
           !_throttle.allow(e.groupKey)) {
         e = e.copyWith(throttled: true);
         send = false;

@@ -121,6 +121,20 @@ void main() {
   );
 
   test(
+    '3xx and other non-2xx statuses are nonfatal unexpected_status',
+    () async {
+      final reporter = RecordingErrorReporter();
+      await _put(_client(_status(302), reporter));
+      await _put(_client(_status(100), reporter));
+
+      expect(reporter.events.map((e) => (e.kind, e.reason)), [
+        (ErrorKind.nonfatal, 'unexpected_status'),
+        (ErrorKind.nonfatal, 'unexpected_status'),
+      ]);
+    },
+  );
+
+  test(
     'upload event never contains the signed url, query or headers',
     () async {
       final reporter = RecordingErrorReporter();

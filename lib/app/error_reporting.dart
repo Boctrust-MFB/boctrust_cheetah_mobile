@@ -127,21 +127,26 @@ class ErrorEvent {
     label.action,
   ].join('|');
 
+  bool get _hasApiLabel =>
+      origin == ErrorOrigin.api ||
+      origin == ErrorOrigin.parser ||
+      origin == ErrorOrigin.upload;
+
   /// One bounded, space-separated line for Crashlytics logs.
   String get breadcrumb {
     final parts = <String?>[
       origin.name,
+      if (throttled) 'suppressed',
       reason,
       backend?.name,
       method,
-      label.endpoint,
-      label.action,
+      if (_hasApiLabel) label.endpoint,
+      if (_hasApiLabel) label.action,
       statusCode?.toString(),
       category,
       summary?.code,
       if (route != null) 'route=$route',
       if (requestedRoute != null) 'requested_route=$requestedRoute',
-      if (throttled) 'suppressed',
     ];
     final line = parts.whereType<String>().where((p) => p.isNotEmpty).join(' ');
     return line.length <= 200 ? line : line.substring(0, 200);
@@ -157,10 +162,12 @@ class ErrorEvent {
     add('origin', origin.name);
     add('backend', backend?.name);
     add('method', method);
-    add('endpoint', label.endpoint);
-    add('feature', label.feature);
-    add('action', label.action);
-    add('stage', label.stage);
+    if (_hasApiLabel) {
+      add('endpoint', label.endpoint);
+      add('feature', label.feature);
+      add('action', label.action);
+      add('stage', label.stage);
+    }
     add('status', statusCode);
     add('category', category);
     add('code', summary?.code);

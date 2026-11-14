@@ -119,8 +119,9 @@ String safeRouteName(String? name) =>
     ? name
     : '[unrecognized]';
 
-class _UnknownRouteError implements Exception {
-  const _UnknownRouteError();
+/// Stable, payload-free error for an unregistered route name.
+class UnknownRouteError implements Exception {
+  const UnknownRouteError();
 
   @override
   String toString() => 'routing unknown_route';
@@ -224,7 +225,7 @@ class AppRouter {
             origin: ErrorOrigin.routing,
             reason: 'unknown_route',
             requestedRoute: safeRouteName(name),
-            error: const _UnknownRouteError(),
+            error: const UnknownRouteError(),
             stack: StackTrace.current,
           ),
         );

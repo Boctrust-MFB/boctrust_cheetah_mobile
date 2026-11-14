@@ -182,9 +182,12 @@ class DioSignedUploadClient implements SignedUploadClient {
       _report('server_5xx', ErrorKind.nonfatal, statusCode, stack);
     } else if (statusCode == 400 || statusCode == 403) {
       _report('expired_link', ErrorKind.breadcrumb, statusCode, stack);
-    } else {
+    } else if (statusCode >= 400 && statusCode < 500) {
       // Not listed by the spec; signals a broken upload contract.
       _report('client_4xx', ErrorKind.nonfatal, statusCode, stack);
+    } else {
+      // Missing, informational or redirect status from the storage endpoint.
+      _report('unexpected_status', ErrorKind.nonfatal, statusCode, stack);
     }
   }
 

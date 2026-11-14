@@ -71,6 +71,53 @@ void main() {
     expect(sink.logCalls.last, contains('suppressed'));
   });
 
+  test('parser nonfatals are throttled like api and upload', () async {
+    final sink = FakeSink();
+    final reporter = FirebaseErrorReporter(sink);
+    const event = ErrorEvent(
+      kind: ErrorKind.nonfatal,
+      origin: ErrorOrigin.parser,
+      reason: 'parser',
+      backend: ApiBackend.user,
+      method: 'GET',
+      category: 'parser',
+    );
+    for (var i = 0; i < 3; i++) {
+      reporter.report(event);
+    }
+    await pumpEventQueue();
+    expect(sink.recordErrorCalls, hasLength(1));
+    expect(sink.logCalls, hasLength(3));
+    expect(sink.logCalls.skip(1), everyElement(contains('suppressed')));
+  });
+
+  test('suppressed marker survives breadcrumb truncation', () {
+    final e = ErrorEvent(
+      kind: ErrorKind.nonfatal,
+      origin: ErrorOrigin.api,
+      reason: 'r' * 100,
+      method: 'GET',
+      category: 'c' * 100,
+      throttled: true,
+      requestedRoute: '/x',
+    );
+    expect(e.breadcrumb.length, lessThanOrEqualTo(200));
+    expect(e.breadcrumb, startsWith('api suppressed'));
+  });
+
+  test('routing events carry no api label placeholders', () {
+    const e = ErrorEvent(
+      kind: ErrorKind.nonfatal,
+      origin: ErrorOrigin.routing,
+      reason: 'unknown_route',
+      requestedRoute: '/x',
+    );
+    final text = [...e.information, e.breadcrumb].join(' ');
+    expect(text, isNot(contains('unknown_action')));
+    expect(text, isNot(contains('endpoint_unclassified')));
+    expect(text, contains('requested_route=/x'));
+  });
+
   test(
     'sink that throws synchronously or asynchronously is swallowed',
     () async {

@@ -37,6 +37,7 @@ class EarlyErrorBuffer {
       ));
     };
     PlatformDispatcher.instance.onError = (error, stack) {
+      if (kDebugMode) debugPrint('Uncaught platform error: $error');
       _add((
         error: error,
         stack: stack,
