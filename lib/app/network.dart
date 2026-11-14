@@ -193,7 +193,7 @@ class ApiService {
         ErrorEvent(
           kind: kind,
           origin: origin,
-          reason: 'api $category',
+          reason: category,
           label: label,
           backend: _backend,
           method: method,

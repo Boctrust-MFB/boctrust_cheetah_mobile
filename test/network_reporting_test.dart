@@ -88,7 +88,7 @@ void main() {
     expect(event.kind, ErrorKind.nonfatal);
     expect(event.origin, ErrorOrigin.api);
     expect(event.category, 'server_5xx');
-    expect(event.reason, 'api server_5xx');
+    expect(event.reason, 'server_5xx');
     expect(event.label.action, 'authorize_transfer');
     expect(event.backend, ApiBackend.user);
     expect(event.method, 'POST');
@@ -284,6 +284,7 @@ void main() {
     }
 
     expect(sink.recordErrorCalls.length, lessThanOrEqualTo(4));
+    expect(sink.recordErrorCalls.first.reason, 'api timeout');
     expect(sink.logCalls, hasLength(30));
   });
 
