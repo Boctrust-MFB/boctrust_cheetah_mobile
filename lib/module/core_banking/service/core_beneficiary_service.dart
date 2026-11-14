@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/core_api_endpoints.dart';
 import '../../../app/core_network.dart';
+import '../../../app/error_reporting.dart';
 import '../../../app/network.dart';
 import '../../../app/services.dart';
 import '../model/beneficiary_models.dart';
@@ -17,6 +18,25 @@ class CoreBeneficiaryService {
   const CoreBeneficiaryService(this._api);
   final ApiService? _api;
 
+  static const _listLabel = ApiCallLabel(
+    feature: 'beneficiaries',
+    action: 'view_beneficiaries',
+    stage: 'load',
+    endpoint: CoreApiEndpoints.beneficiaries,
+  );
+  static const _addLabel = ApiCallLabel(
+    feature: 'beneficiaries',
+    action: 'save_beneficiary',
+    stage: 'submit',
+    endpoint: CoreApiEndpoints.beneficiaries,
+  );
+  static const _deleteLabel = ApiCallLabel(
+    feature: 'beneficiaries',
+    action: 'remove_beneficiary',
+    stage: 'submit',
+    endpoint: CoreApiEndpoints.beneficiaryTemplate,
+  );
+
   Future<NotifierState<List<Beneficiary>>> list() async {
     final api = _api;
     if (api == null) return const NotifierState.blocked(_unavailable);
@@ -24,6 +44,7 @@ class CoreBeneficiaryService {
       await api.getData<List<Beneficiary>>(
         CoreApiEndpoints.beneficiaries,
         parser: Beneficiary.listFromJson,
+        requestExtra: {apiCallLabelKey: _listLabel},
       ),
     );
   }
@@ -39,6 +60,7 @@ class CoreBeneficiaryService {
         parser: (json) =>
             Beneficiary.tryParse(json) ??
             (throw const FormatException('Invalid beneficiary.')),
+        requestExtra: {apiCallLabelKey: _addLabel},
       ),
     );
   }
@@ -50,6 +72,7 @@ class CoreBeneficiaryService {
       await api.deleteData<bool>(
         CoreApiEndpoints.beneficiary(id),
         parser: (_) => true,
+        requestExtra: {apiCallLabelKey: _deleteLabel},
       ),
     );
   }

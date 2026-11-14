@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/api_endpoints.dart';
+import '../../../app/error_reporting.dart';
 import '../../../app/network.dart';
 import '../../../app/services.dart';
 import '../model/withdrawal_bank_models.dart';
@@ -18,11 +19,51 @@ class WithdrawalBankService {
   const WithdrawalBankService(this._api);
   final ApiService _api;
 
+  static const _template =
+      '${ApiEndpoints.withdrawalBankAccounts}/{bankAccountId}';
+  static const _getBanksLabel = ApiCallLabel(
+    feature: 'linked_banks',
+    action: 'view_bank_list',
+    stage: 'load',
+    endpoint: ApiEndpoints.banks,
+  );
+  static const _listAccountsLabel = ApiCallLabel(
+    feature: 'linked_banks',
+    action: 'view_linked_banks',
+    stage: 'load',
+    endpoint: ApiEndpoints.withdrawalBankAccounts,
+  );
+  static const _getAccountLabel = ApiCallLabel(
+    feature: 'linked_banks',
+    action: 'view_linked_bank',
+    stage: 'load',
+    endpoint: _template,
+  );
+  static const _resolveAccountLabel = ApiCallLabel(
+    feature: 'linked_banks',
+    action: 'add_linked_bank',
+    stage: 'resolve_account',
+    endpoint: ApiEndpoints.resolveWithdrawalBankAccount,
+  );
+  static const _addAccountLabel = ApiCallLabel(
+    feature: 'linked_banks',
+    action: 'add_linked_bank',
+    stage: 'submit',
+    endpoint: ApiEndpoints.withdrawalBankAccounts,
+  );
+  static const _deleteAccountLabel = ApiCallLabel(
+    feature: 'linked_banks',
+    action: 'remove_linked_bank',
+    stage: 'submit',
+    endpoint: _template,
+  );
+
   Future<NotifierState<BankCatalogueData>> getBanks() async =>
       NotifierState.fromResponse(
         await _api.getData<BankCatalogueData>(
           ApiEndpoints.banks,
           parser: BankCatalogueData.fromJson,
+          requestExtra: {apiCallLabelKey: _getBanksLabel},
         ),
       );
 
@@ -31,6 +72,7 @@ class WithdrawalBankService {
         await _api.getData<WithdrawalBankAccountListData>(
           ApiEndpoints.withdrawalBankAccounts,
           parser: WithdrawalBankAccountListData.fromJson,
+          requestExtra: {apiCallLabelKey: _listAccountsLabel},
         ),
       );
 
@@ -40,6 +82,7 @@ class WithdrawalBankService {
     await _api.getData<WithdrawalBankAccount>(
       ApiEndpoints.withdrawalBankAccount(bankAccountId),
       parser: WithdrawalBankAccount.fromJson,
+      requestExtra: {apiCallLabelKey: _getAccountLabel},
     ),
   );
 
@@ -51,6 +94,7 @@ class WithdrawalBankService {
       ApiEndpoints.resolveWithdrawalBankAccount,
       data: request.toJson(),
       parser: ResolveWithdrawalBankAccountData.fromJson,
+      requestExtra: {apiCallLabelKey: _resolveAccountLabel},
     ),
   );
 
@@ -61,6 +105,7 @@ class WithdrawalBankService {
       ApiEndpoints.withdrawalBankAccounts,
       data: request.toJson(),
       parser: AddWithdrawalBankAccountData.fromJson,
+      requestExtra: {apiCallLabelKey: _addAccountLabel},
     ),
   );
 
@@ -70,6 +115,7 @@ class WithdrawalBankService {
     await _api.deleteData<DeleteWithdrawalBankAccountData>(
       ApiEndpoints.withdrawalBankAccount(bankAccountId),
       parser: DeleteWithdrawalBankAccountData.fromJson,
+      requestExtra: {apiCallLabelKey: _deleteAccountLabel},
     ),
   );
 }

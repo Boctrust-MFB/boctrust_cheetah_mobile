@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/api_endpoints.dart';
+import '../../../app/error_reporting.dart';
 import '../../../app/interceptors.dart';
 import '../../../app/network.dart';
 import '../../../app/services.dart';
@@ -14,6 +15,19 @@ final transactionReconfirmationServiceProvider =
 class TransactionReconfirmationService {
   const TransactionReconfirmationService(this._api);
   final ApiService _api;
+
+  static const _initiateLabel = ApiCallLabel(
+    feature: 'kyc',
+    action: 'reconfirm_identity',
+    stage: 'initiate',
+    endpoint: ApiEndpoints.initiateIdentityReconfirmation,
+  );
+  static const _statusLabel = ApiCallLabel(
+    feature: 'kyc',
+    action: 'reconfirm_identity',
+    stage: 'check_status',
+    endpoint: ApiEndpoints.identityReconfirmationTemplate,
+  );
 
   /// Starts a selfie reconfirmation bound to one transfer [reference].
   ///
@@ -38,6 +52,7 @@ class TransactionReconfirmationService {
       requestExtra: {
         LoggingInterceptor.privacySensitivePathKey:
             ApiEndpoints.initiateIdentityReconfirmation,
+        apiCallLabelKey: _initiateLabel,
       },
     ),
   );
@@ -52,6 +67,7 @@ class TransactionReconfirmationService {
       requestExtra: {
         LoggingInterceptor.privacySensitivePathKey:
             ApiEndpoints.identityReconfirmationTemplate,
+        apiCallLabelKey: _statusLabel,
       },
     ),
   );
