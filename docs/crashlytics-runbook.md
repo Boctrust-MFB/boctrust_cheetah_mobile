@@ -6,7 +6,8 @@ Privacy-safe Firebase Crashlytics reporting for the Cheetah app. Spec: `docs/sup
 
 - Flag: `--dart-define=CRASHLYTICS_ENABLED=true` (via `--dart-define-from-file`).
   - `.env.stage`: `true`. `.env.prod`: `false`. `.env.example`: `false`.
-- Collection also requires a non-debug build and Android or iOS. Otherwise the app uses the no-op reporter and calls `setCrashlyticsCollectionEnabled(false)`.
+  - `.env.stage` and `.env.prod` are git-ignored, so the flag is local only. Each builder must add `CRASHLYTICS_ENABLED=true` to their own `.env.stage`; only `.env.example` is committed.
+- Collection also requires a non-debug build and Android or iOS. Otherwise the app uses the no-op reporter. On a supported platform with Firebase initialized, a disallowed build also calls `setCrashlyticsCollectionEnabled(false)`. That call is NOT made on unsupported platforms or when Firebase init fails; there the no-op reporter simply never sends anything.
 - Staging and production share one Firebase project and one set of Crashlytics apps. The only global custom key is `env` (`Env.environment`), and it is the only filterable field. There is no `device_type` key.
 - Rollout:
   1. Build staging with `.env.stage`, release mode, and run the staging validation (section 9).
@@ -52,7 +53,8 @@ Endpoint is always `signed_upload` (feature `kyc`, action `upload_kyc_document`)
 | --- | --- | --- |
 | 5xx | `server_5xx` | nonfatal |
 | 400 or 403 | `expired_link` | breadcrumb |
-| Other status | `client_4xx` | nonfatal |
+| Other 4xx (not 400/403) | `client_4xx` | nonfatal |
+| Any other non-2xx (missing/0, 1xx, 3xx) | `unexpected_status` | nonfatal |
 | `connectionError` | `offline` | breadcrumb |
 | Timeout (connect, send, receive) | `timeout` | nonfatal |
 | Other transport failure | `transport` | nonfatal |
@@ -60,17 +62,18 @@ Endpoint is always `signed_upload` (feature `kyc`, action `upload_kyc_document`)
 
 ### Routing
 
-One non-fatal for navigation to an unregistered name. `/` is excluded (Flutter generates it beneath `/bootstrap` on cold start). The name is shown only if it matches `^/[a-z0-9-]{1,32}$`, otherwise `[unrecognized]`. Route arguments are never sent. The main source is the server-supplied `route` in push notifications.
+One non-fatal for navigation to an unregistered name. `/` is excluded (Flutter generates it beneath `/bootstrap` on cold start). The name is shown only if it matches `^/[a-z0-9-]{1,32}$`, otherwise `[unrecognized]`. Route arguments are never sent. The main source is the server-supplied `route` in push notifications. Notification taps never reach the router with an unknown name: `NotificationNavigator.parse` (`lib/helper/notification_navigator.dart`) replaces a `route` not in `AppRoutes.allRoutes` with `/notifications` and, in that fallback, reports the same `routing unknown_route` non-fatal (once per parse, name sanitized, payload and `id` never sent). Navigation is unchanged. The router's own report covers every other unregistered name.
 
 ### Throttle (`lib/app/error_reporting.dart`, applied in `lib/app/firebase_error_reporter.dart`)
 
-- Applies only to non-fatals with origin `api` or `upload`, which covers every non-fatal row in the API and upload tables above except `parser`.
-- Not throttled, as the code stands today: origins `flutter`, `platform` and `routing`, and origin `parser` (that row is classified with origin `parser`, so it bypasses the throttle). Breadcrumbs are never throttled.
+- Applies only to non-fatals with origin `api`, `upload` or `parser`, which covers every non-fatal row in the API and upload tables above.
+- Not throttled: origins `flutter`, `platform` and `routing`. Breadcrumbs are never throttled.
 
 - At most 1 non-fatal per group key per 10 minutes.
 - At most 4 API and upload non-fatals per session, to leave device-buffer room for Flutter, platform and routing events.
 - Group key: `backend|method|endpoint|category|code|action`.
-- Suppressed events still write their breadcrumb, marked `suppressed`.
+- Suppressed events still write their breadcrumb, marked `suppressed` (placed right after the origin so the 200-character truncation never drops it).
+- Routing events carry no endpoint/feature/action/stage lines; those appear only for origins `api`, `parser` and `upload`, so the `unknown_action` count measures unlabeled API calls only.
 - These are the launch values. Tune them after staging validation and record the final numbers here.
 
 ## 4. What an event looks like
@@ -129,7 +132,9 @@ Triggers:
 - [ ] Pending, not yet run: 5xx with a request ID
 - [ ] Pending, not yet run: 5xx with an echoed phone number in `message`
 - [ ] Pending, not yet run: malformed reply
-- [ ] Pending, not yet run: unknown notification `route`
+- [ ] Pending, not yet run: unknown notification `route` (tap a push whose `route` is unregistered; expect one `routing unknown_route`, reported by `NotificationNavigator.parse`, and the app lands on Notifications)
+- [ ] Pending, not yet run: background and terminated push receive-and-tap check (Task 1 bumped `firebase_core` 4.13 to 4.15.2 and `firebase_messaging` 16.5 to 16.7.1)
+- [ ] Pending, not yet run: Dojah KYC smoke test (same dependency bump)
 
 Console checks (for each event):
 
@@ -138,12 +143,14 @@ Console checks (for each event):
 - [ ] Pending, not yet run: request ID and route present
 - [ ] Pending, not yet run: built-in device and OS fields (decides whether `device_info_plus` is needed)
 - [ ] Pending, not yet run: the 4xx appears only as a log line on a later report
-- [ ] Pending, not yet run: API failures from different service methods appear as separate issues
+- [ ] Pending, not yet run: GATE, see "Grouping gate" below. API non-fatals from different service operations appear as separate Crashlytics issues
 - [ ] Pending, not yet run: symbols upload and stacks are readable on a real release archive (Android and iOS)
 
 Known gaps to verify:
 
-- Grouping: every call-site stack's top frame is `ApiService.getData/postData/...`. If issues from different service methods merge, drop the top frame before reporting.
+- Grouping gate: this MUST pass before `.env.prod` is flipped to `true`. Every call-site stack's top frame is `ApiService.getData/postData/...`, so non-fatals from different service operations may merge into one issue. Trigger at least two different operations that fail the same way and confirm they land as separate issues. If they merge, the options are:
+  1. Trim the top `ApiService.*` frame before reporting. Shared helpers (for example `CoreTransferService._check` and `_initiate`) then become the shared top frame, so verify those still separate by operation.
+  2. Build the reported stack with a synthetic first frame derived from the label (for example `api.<action>.<stage>`), and check that it survives obfuscated traces.
 - Symbol upload on a real release archive (section 8).
 
 Prod rollout (section 1): Pending, after the staging week.
