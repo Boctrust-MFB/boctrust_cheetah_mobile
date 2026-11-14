@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
+import 'app/app_router.dart';
 import 'app/error_handlers.dart';
 import 'app/services.dart';
 import 'helper/fcm_service.dart';
@@ -29,6 +30,7 @@ Future<void> main() async {
 
   final errorReporter = await createErrorReporter(firebaseReady: firebaseReady);
   installErrorHandlers(errorReporter);
+  AppRouter.reporter = errorReporter;
   for (final e in earlyErrors.drain()) {
     errorReporter.recordUncaught(
       e.error,

@@ -93,6 +93,7 @@ class _CheetahMaterialApp extends ConsumerWidget {
       ),
       themeMode: themeMode,
       initialRoute: initialRoute,
+      navigatorObservers: [RouteTracker()],
       onGenerateRoute: AppRouter.onGenerateRoute,
       onUnknownRoute: AppRouter.onUnknownRoute,
       builder: (context, child) {

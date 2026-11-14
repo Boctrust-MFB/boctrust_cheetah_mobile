@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:iconsax_plus/iconsax_plus.dart';
 
 import '../module/app_flow/app_ui.dart';
+import 'error_reporting.dart';
 import 'route_arguments.dart';
 import 'route_message_scope.dart';
 
@@ -109,8 +110,52 @@ class AppRoutes {
   static final privateRoutes = allRoutes.difference(publicRoutes);
 }
 
+final _safeRouteNamePattern = RegExp(r'^/[a-z0-9-]{1,32}$');
+
+/// The route name when it is short and plain, else a fixed marker, so a
+/// server-supplied name can never carry data into a report.
+String safeRouteName(String? name) =>
+    name != null && _safeRouteNamePattern.hasMatch(name)
+    ? name
+    : '[unrecognized]';
+
+class _UnknownRouteError implements Exception {
+  const _UnknownRouteError();
+
+  @override
+  String toString() => 'routing unknown_route';
+}
+
+/// Records the last registered route so every report carries it.
+class RouteTracker extends NavigatorObserver {
+  void _record(Route<dynamic>? route) {
+    final name = route?.settings.name;
+    if (name != null && AppRoutes.allRoutes.contains(name)) {
+      reportingContext.lastRoute = name;
+    }
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _record(route);
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) =>
+      _record(newRoute);
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _record(previousRoute);
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) =>
+      _record(previousRoute);
+}
+
 class AppRouter {
   const AppRouter._();
+
+  static AppErrorReporter reporter = const NoopErrorReporter();
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final page = _pageFor(settings);
@@ -171,6 +216,20 @@ class AppRouter {
           : screen;
     }
 
+    if (name != Navigator.defaultRouteName) {
+      try {
+        reporter.report(
+          ErrorEvent(
+            kind: ErrorKind.nonfatal,
+            origin: ErrorOrigin.routing,
+            reason: 'unknown_route',
+            requestedRoute: safeRouteName(name),
+            error: const _UnknownRouteError(),
+            stack: StackTrace.current,
+          ),
+        );
+      } catch (_) {}
+    }
     return _placeholder(settings.name ?? 'Unknown route');
   }
 
