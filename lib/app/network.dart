@@ -3,12 +3,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../helper/secure_storage.dart';
 import '../module/onboarding/provider/auth_session_provider.dart';
+import 'api_error_summary.dart';
+import 'api_failure_classifier.dart';
 import 'api_logger.dart';
+import 'error_reporting.dart';
 import 'interceptors.dart';
 import 'services.dart';
 import 'session_expiry_coordinator.dart';
 
 typedef ApiDataParser<T> = T Function(Object? data);
+
+/// A mapped reply, the facts used to classify it, and the parser's stack
+/// when the parser rejected the data.
+typedef _Mapped<T> = ({
+  ServiceResponse<T> response,
+  ApiOutcome outcome,
+  StackTrace? parserStack,
+});
 
 /// The Dio shared by the User and Core transports: JSON headers, 30 second
 /// timeouts, and the [auth] interceptor followed by logging and activity.
@@ -46,13 +57,22 @@ final dioProvider = Provider<Dio>((ref) {
 });
 
 final apiServiceProvider = Provider<ApiService>(
-  (ref) => ApiService(ref.watch(dioProvider)),
+  (ref) => ApiService(
+    ref.watch(dioProvider),
+    reporter: ref.watch(errorReporterProvider),
+  ),
 );
 
 class ApiService {
-  const ApiService(this._dio);
+  const ApiService(
+    this._dio, {
+    this._backend = ApiBackend.user,
+    this._reporter = const NoopErrorReporter(),
+  });
 
   final Dio _dio;
+  final ApiBackend _backend;
+  final AppErrorReporter _reporter;
 
   /// [cancelToken] abandons a request whose answer is no longer wanted,
   /// such as a recipient lookup for a number the customer has since changed.
@@ -70,6 +90,10 @@ class ApiService {
       cancelToken: cancelToken,
     ),
     parser,
+    method: 'GET',
+    requestExtra: requestExtra,
+    // Captured before any await so each service operation groups apart.
+    callStack: StackTrace.current,
   );
 
   Future<ServiceResponse<T>> postData<T>(
@@ -86,6 +110,10 @@ class ApiService {
       cancelToken: cancelToken,
     ),
     parser,
+    method: 'POST',
+    requestExtra: requestExtra,
+    // Captured before any await so each service operation groups apart.
+    callStack: StackTrace.current,
   );
 
   Future<ServiceResponse<T>> patchData<T>(
@@ -100,6 +128,10 @@ class ApiService {
       options: Options(extra: requestExtra),
     ),
     parser,
+    method: 'PATCH',
+    requestExtra: requestExtra,
+    // Captured before any await so each service operation groups apart.
+    callStack: StackTrace.current,
   );
 
   Future<ServiceResponse<T>> deleteData<T>(
@@ -114,56 +146,117 @@ class ApiService {
       options: Options(extra: requestExtra),
     ),
     parser,
+    method: 'DELETE',
+    requestExtra: requestExtra,
+    // Captured before any await so each service operation groups apart.
+    callStack: StackTrace.current,
   );
 
   Future<ServiceResponse<T>> _request<T>(
     Future<Response<Object?>> Function() call,
-    ApiDataParser<T> parser,
-  ) async {
+    ApiDataParser<T> parser, {
+    required String method,
+    required Map<String, Object?>? requestExtra,
+    required StackTrace callStack,
+  }) async {
+    _Mapped<T> mapped;
     try {
-      return _mapResponse(await call(), parser);
+      mapped = _mapResponse(await call(), parser);
     } on DioException catch (error) {
-      return _mapDioException(error, parser);
+      mapped = _mapDioException(error, parser);
     } catch (_) {
-      return const ServiceResponse.error('The server response was invalid.');
+      mapped = (
+        response: const ServiceResponse.error(
+          'The server response was invalid.',
+        ),
+        outcome: ApiOutcome(backend: _backend, parserFailed: true),
+        parserStack: null,
+      );
     }
+    _report(mapped, method, requestExtra, callStack);
+    return mapped.response;
   }
 
-  ServiceResponse<T> _mapResponse<T>(
+  /// Reports a failed request once. Never throws and never changes the reply.
+  void _report<T>(
+    _Mapped<T> mapped,
+    String method,
+    Map<String, Object?>? requestExtra,
+    StackTrace callStack,
+  ) {
+    try {
+      final (:kind, :origin, :category) = classifyApiOutcome(mapped.outcome);
+      if (kind == ErrorKind.ignored || category == 'ok') return;
+      final value = requestExtra?[apiCallLabelKey];
+      final label = value is ApiCallLabel ? value : ApiCallLabel.unlabeled;
+      _reporter.report(
+        ErrorEvent(
+          kind: kind,
+          origin: origin,
+          reason: 'api $category',
+          label: label,
+          backend: _backend,
+          method: method,
+          category: category,
+          statusCode: mapped.outcome.statusCode,
+          summary: summarizeApiError(mapped.response, headerRequestId: null),
+          // The endpoint comes from the label only, never the request path.
+          error: ApiFailure(
+            '${_backend.name} $method ${label.endpoint} $category',
+          ),
+          stack: mapped.parserStack ?? callStack,
+        ),
+      );
+    } catch (_) {}
+  }
+
+  _Mapped<T> _mapResponse<T>(
     Response<Object?> response,
     ApiDataParser<T> parser,
   ) {
     final statusCode = response.statusCode;
     final body = response.data;
     if (body is! Map) {
-      return ServiceResponse<T>.error(
-        'The server response was invalid.',
-        statusCode: statusCode,
+      return (
+        response: ServiceResponse<T>.error(
+          'The server response was invalid.',
+          statusCode: statusCode,
+        ),
+        outcome: ApiOutcome(backend: _backend, statusCode: statusCode),
+        parserStack: null,
       );
     }
     final json = Map<String, Object?>.from(body);
     final message = json['message'] as String?;
     final meta = ApiMeta.fromJson(json['meta']);
     if (json['success'] != true) {
-      return ServiceResponse<T>(
-        status: ServiceStatus.error,
-        data: _conflictData(statusCode, json, parser),
-        message: message ?? 'Request failed.',
-        statusCode: statusCode,
-        errorCode: json['code'] as String?,
-        errors: _errors(json['errors']),
-        meta: meta,
+      return (
+        response: ServiceResponse<T>(
+          status: ServiceStatus.error,
+          data: _conflictData(statusCode, json, parser),
+          message: message ?? 'Request failed.',
+          statusCode: statusCode,
+          errorCode: json['code'] as String?,
+          errors: _errors(json['errors']),
+          meta: meta,
+        ),
+        outcome: _envelopeOutcome(statusCode, json),
+        parserStack: null,
       );
     }
 
     try {
-      return ServiceResponse<T>.success(
-        parser(json['data']),
-        message: message,
-        statusCode: statusCode,
-        meta: meta,
+      return (
+        response: ServiceResponse<T>.success(
+          parser(json['data']),
+          message: message,
+          statusCode: statusCode,
+          meta: meta,
+        ),
+        outcome: _envelopeOutcome(statusCode, json),
+        parserStack: null,
       );
-    } catch (error) {
+    } catch (error, stack) {
       // Staging reads this beside the logged RESPONSE body to fit a model to
       // a reply whose schema is unpublished. Parser messages carry no data.
       if (Env.isStaging) {
@@ -176,50 +269,101 @@ class ApiService {
               : error.runtimeType.toString(),
         });
       }
-      return ServiceResponse<T>.error(
-        'The server response was invalid.',
-        statusCode: statusCode,
-        meta: meta,
+      return (
+        response: ServiceResponse<T>.error(
+          'The server response was invalid.',
+          statusCode: statusCode,
+          meta: meta,
+        ),
+        outcome: ApiOutcome(
+          backend: _backend,
+          statusCode: statusCode,
+          hasEnvelope: true,
+          success: true,
+          parserFailed: true,
+        ),
+        parserStack: stack,
       );
     }
   }
 
-  ServiceResponse<T> _mapDioException<T>(
-    DioException error,
-    ApiDataParser<T> parser,
-  ) {
+  _Mapped<T> _mapDioException<T>(DioException error, ApiDataParser<T> parser) {
     final statusCode = error.response?.statusCode;
     final noAuth = error.requestOptions.extra['sessionExpiryHandled'] == true;
     if (error.error is LocalSessionExpired) {
-      return ServiceResponse<T>.error(
-        'Your session has expired. Please sign in again.',
-        statusCode: 401,
-        errorCode: kLocalSessionExpiredCode,
-        noAuth: noAuth,
+      return (
+        response: ServiceResponse<T>.error(
+          'Your session has expired. Please sign in again.',
+          statusCode: 401,
+          errorCode: kLocalSessionExpiredCode,
+          noAuth: noAuth,
+        ),
+        // Not a cancel for reporting: classified as session expiry.
+        outcome: ApiOutcome(
+          backend: _backend,
+          statusCode: 401,
+          localSessionExpired: true,
+          sessionExpiryHandled: noAuth,
+        ),
+        parserStack: null,
       );
     }
 
     final body = error.response?.data;
     if (body is Map) {
       final json = Map<String, Object?>.from(body);
-      return ServiceResponse<T>(
-        status: ServiceStatus.error,
-        data: _conflictData(statusCode, json, parser),
-        message: json['message'] as String? ?? 'Request failed.',
-        statusCode: statusCode,
-        errorCode: json['code'] as String?,
-        errors: _errors(json['errors']),
-        meta: ApiMeta.fromJson(json['meta']),
-        noAuth: noAuth,
+      return (
+        response: ServiceResponse<T>(
+          status: ServiceStatus.error,
+          data: _conflictData(statusCode, json, parser),
+          message: json['message'] as String? ?? 'Request failed.',
+          statusCode: statusCode,
+          errorCode: json['code'] as String?,
+          errors: _errors(json['errors']),
+          meta: ApiMeta.fromJson(json['meta']),
+          noAuth: noAuth,
+        ),
+        outcome: _envelopeOutcome(
+          statusCode,
+          json,
+          dioType: error.type,
+          sessionExpiryHandled: noAuth,
+        ),
+        parserStack: null,
       );
     }
 
-    return ServiceResponse<T>.error(
-      _transportMessage(error),
-      statusCode: statusCode,
-      noAuth: noAuth,
+    return (
+      response: ServiceResponse<T>.error(
+        _transportMessage(error),
+        statusCode: statusCode,
+        noAuth: noAuth,
+      ),
+      outcome: ApiOutcome(
+        backend: _backend,
+        statusCode: statusCode,
+        dioType: error.type,
+        sessionExpiryHandled: noAuth,
+      ),
+      parserStack: null,
     );
   }
+
+  /// A JSON object body is an envelope when it carries `success`; as in
+  /// [_mapResponse], anything but `true` counts as a failed reply.
+  ApiOutcome _envelopeOutcome(
+    int? statusCode,
+    Map<String, Object?> json, {
+    DioExceptionType? dioType,
+    bool sessionExpiryHandled = false,
+  }) => ApiOutcome(
+    backend: _backend,
+    statusCode: statusCode,
+    dioType: dioType,
+    hasEnvelope: json.containsKey('success'),
+    success: json['success'] == true,
+    sessionExpiryHandled: sessionExpiryHandled,
+  );
 
   /// A 409 may return the resource already in the way (for KYC, the
   /// verification in progress) so the caller can reopen it. Any other error's

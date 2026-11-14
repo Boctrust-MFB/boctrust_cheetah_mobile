@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../helper/secure_storage.dart';
 import '../module/onboarding/provider/auth_session_provider.dart';
+import 'error_reporting.dart';
 import 'interceptors.dart';
 import 'network.dart';
 import 'services.dart';
@@ -35,5 +36,10 @@ final coreDioProvider = Provider<Dio?>((ref) {
 /// not configured.
 final coreApiServiceProvider = Provider<ApiService?>((ref) {
   final dio = ref.watch(coreDioProvider);
-  return dio == null ? null : ApiService(dio);
+  if (dio == null) return null;
+  return ApiService(
+    dio,
+    backend: ApiBackend.core,
+    reporter: ref.watch(errorReporterProvider),
+  );
 });

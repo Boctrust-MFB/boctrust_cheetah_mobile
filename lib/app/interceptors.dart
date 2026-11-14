@@ -4,6 +4,7 @@ import 'package:logger/logger.dart';
 import '../module/onboarding/model/auth_session.dart';
 import 'api_endpoints.dart';
 import 'api_logger.dart';
+import 'error_reporting.dart';
 
 class LocalSessionExpired {
   const LocalSessionExpired({required this.suppressed});
@@ -325,6 +326,8 @@ class LoggingInterceptor extends Interceptor {
     extra.remove(privacySensitivePathKey);
     // Internal plumbing for logout revocation, not request data.
     extra.remove(AuthInterceptor.pinnedAccessTokenKey);
+    // Crashlytics grouping metadata, not request data.
+    extra.remove(apiCallLabelKey);
     return extra;
   }
 
