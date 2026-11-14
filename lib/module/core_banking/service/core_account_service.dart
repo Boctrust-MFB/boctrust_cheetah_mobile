@@ -18,6 +18,10 @@ import '../model/customer_bank_account_models.dart';
 
 const _coreUnavailable = 'Account services are not available right now.';
 
+/// The core banking system took 24 seconds for a three-week statement on
+/// staging; a twelve-month one can run past the 30 second default.
+const _statementTimeout = Duration(minutes: 2);
+
 final coreAccountServiceProvider = Provider<CoreAccountService>(
   (ref) => CoreAccountService(ref.watch(coreApiServiceProvider)),
 );
@@ -135,6 +139,7 @@ class CoreAccountService {
           'toDate': formatCoreDateOnly(toDate),
         },
         parser: CoreAccountStatementReply.fromJson,
+        receiveTimeout: _statementTimeout,
       ),
     );
     final parsed = reply.data;

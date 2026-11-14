@@ -56,17 +56,20 @@ class ApiService {
 
   /// [cancelToken] abandons a request whose answer is no longer wanted,
   /// such as a recipient lookup for a number the customer has since changed.
+  /// [receiveTimeout] replaces the 30 second default for a reply Core is
+  /// known to take longer to produce.
   Future<ServiceResponse<T>> getData<T>(
     String path, {
     required ApiDataParser<T> parser,
     Map<String, dynamic>? queryParameters,
     Map<String, Object?>? requestExtra,
     CancelToken? cancelToken,
+    Duration? receiveTimeout,
   }) => _request(
     () => _dio.get<Object?>(
       path,
       queryParameters: queryParameters,
-      options: Options(extra: requestExtra),
+      options: Options(extra: requestExtra, receiveTimeout: receiveTimeout),
       cancelToken: cancelToken,
     ),
     parser,
