@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app/app_router.dart';
+import 'app/error_reporting.dart';
 import 'app/auth_flow_listener.dart';
 import 'app/inactivity_guard.dart';
 import 'app/navigators.dart';
@@ -20,6 +21,7 @@ class CheetahApp extends StatelessWidget {
     required this.preferences,
     this.firebaseReady = false,
     this.notifications,
+    this.errorReporter = const NoopErrorReporter(),
     this.overrides = const [],
     this.initialRoute = AppRoutes.initial,
   });
@@ -27,6 +29,7 @@ class CheetahApp extends StatelessWidget {
   final SharedPreferences preferences;
   final bool firebaseReady;
   final LocalNotificationService? notifications;
+  final AppErrorReporter errorReporter;
   final List<dynamic> overrides;
   final String initialRoute;
 
@@ -36,6 +39,7 @@ class CheetahApp extends StatelessWidget {
       overrides: [
         sharedPreferencesProvider.overrideWithValue(preferences),
         firebaseReadyProvider.overrideWithValue(firebaseReady),
+        errorReporterProvider.overrideWithValue(errorReporter),
         localNotificationServiceProvider.overrideWithValue(notifications),
         ...overrides,
       ],

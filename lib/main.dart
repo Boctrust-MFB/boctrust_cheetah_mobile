@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
+import 'app/error_handlers.dart';
 import 'app/services.dart';
 import 'helper/fcm_service.dart';
 import 'helper/firebase_bootstrap.dart';
@@ -12,6 +13,7 @@ import 'module/app_flow/app_ui.dart' show BocBrandMark;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final earlyErrors = EarlyErrorBuffer()..install();
   AppBootstrap.initialize();
   // Cached while the native splash shows, so Flutter's first splash frame
   // already has the mark.
@@ -23,6 +25,17 @@ Future<void> main() async {
     firebaseReady = true;
   } catch (_) {
     firebaseReady = false;
+  }
+
+  final errorReporter = await createErrorReporter(firebaseReady: firebaseReady);
+  installErrorHandlers(errorReporter);
+  for (final e in earlyErrors.drain()) {
+    errorReporter.recordUncaught(
+      e.error,
+      e.stack,
+      origin: e.origin,
+      details: e.details,
+    );
   }
 
   // Taps are routed by AuthFlowListener once authentication is ready; a
@@ -40,6 +53,7 @@ Future<void> main() async {
     CheetahApp(
       preferences: preferences,
       firebaseReady: firebaseReady,
+      errorReporter: errorReporter,
       notifications: notifications,
     ),
   );

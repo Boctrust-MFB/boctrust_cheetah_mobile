@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 
@@ -103,9 +104,13 @@ class FirebaseErrorReporter implements AppErrorReporter {
         if (library != null) 'library=$library',
         if (errorContext != null) 'context=$errorContext',
       ];
+      // DioException.toString() carries the request URI.
+      final safeError = error is DioException
+          ? ApiFailure('uncaught dio ${error.type.name}')
+          : error;
       _safe(
         () => _sink.recordError(
-          error,
+          safeError,
           stack,
           reason: 'uncaught ${origin.name}',
           information: information,

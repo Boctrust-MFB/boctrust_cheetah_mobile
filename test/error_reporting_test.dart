@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:boctrust_savings_loan/app/error_reporting.dart';
 import 'package:boctrust_savings_loan/app/firebase_error_reporter.dart';
 import 'package:flutter/foundation.dart';
@@ -152,5 +153,23 @@ void main() {
         endpoint: 'endpoint_unclassified',
       ),
     );
+  });
+
+  test('uncaught DioException is recorded without its request URI', () async {
+    final sink = FakeSink();
+    FirebaseErrorReporter(sink).recordUncaught(
+      DioException(
+        requestOptions: RequestOptions(
+          path: 'https://secret.example.com/api/accounts/123',
+        ),
+        type: DioExceptionType.connectionTimeout,
+      ),
+      StackTrace.empty,
+      origin: ErrorOrigin.platform,
+    );
+    await pumpEventQueue();
+    final recorded = sink.recordErrorCalls.single.error.toString();
+    expect(recorded, contains('uncaught dio'));
+    expect(recorded, isNot(contains('secret.example.com')));
   });
 }
