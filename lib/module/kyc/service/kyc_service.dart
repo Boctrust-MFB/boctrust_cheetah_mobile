@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/api_endpoints.dart';
+import '../../../app/error_reporting.dart';
 import '../../../app/network.dart';
 import '../../../app/services.dart';
 import '../model/kyc_configuration_models.dart';
@@ -15,6 +16,49 @@ class KycService {
   const KycService(this._api);
   final ApiService _api;
 
+  static const _statusLabel = ApiCallLabel(
+    feature: 'kyc',
+    action: 'view_kyc_status',
+    stage: 'load',
+    endpoint: ApiEndpoints.ownKycStatus,
+  );
+  static const _providerConfigLabel = ApiCallLabel(
+    feature: 'kyc',
+    action: 'verify_government_id',
+    stage: 'load_provider_config',
+    endpoint: ApiEndpoints.kycProviderConfig,
+  );
+  static const _documentTypesLabel = ApiCallLabel(
+    feature: 'kyc',
+    action: 'verify_government_id',
+    stage: 'load_document_types',
+    endpoint: ApiEndpoints.governmentIdDocumentTypes,
+  );
+  static const _initiateIdentityLabel = ApiCallLabel(
+    feature: 'kyc',
+    action: 'verify_identity',
+    stage: 'initiate',
+    endpoint: ApiEndpoints.initiateIdentityVerification,
+  );
+  static const _initiateGovernmentIdLabel = ApiCallLabel(
+    feature: 'kyc',
+    action: 'verify_government_id',
+    stage: 'initiate',
+    endpoint: ApiEndpoints.initiateGovernmentIdVerification,
+  );
+  static const _initiateUtilityBillLabel = ApiCallLabel(
+    feature: 'kyc',
+    action: 'submit_utility_bill',
+    stage: 'initiate',
+    endpoint: ApiEndpoints.initiateUtilityBillUpload,
+  );
+  static const _completeUtilityBillLabel = ApiCallLabel(
+    feature: 'kyc',
+    action: 'submit_utility_bill',
+    stage: 'complete',
+    endpoint: '/users/me/kyc/utility-bill/{verificationId}/complete',
+  );
+
   /// The authoritative view of this user's verification state.
   ///
   /// Initiation and SDK submission never mean verified; this operation and the
@@ -24,6 +68,7 @@ class KycService {
         await _api.getData<KycStatusData>(
           ApiEndpoints.ownKycStatus,
           parser: KycStatusData.fromJson,
+          requestExtra: {apiCallLabelKey: _statusLabel},
         ),
       );
 
@@ -34,6 +79,7 @@ class KycService {
         await _api.getData<KycProviderConfigData>(
           ApiEndpoints.kycProviderConfig,
           parser: KycProviderConfigData.fromJson,
+          requestExtra: {apiCallLabelKey: _providerConfigLabel},
         ),
       );
 
@@ -43,6 +89,7 @@ class KycService {
     await _api.getData<GovernmentIdDocumentCatalogue>(
       ApiEndpoints.governmentIdDocumentTypes,
       parser: GovernmentIdDocumentCatalogue.fromJson,
+      requestExtra: {apiCallLabelKey: _documentTypesLabel},
     ),
   );
 
@@ -53,6 +100,7 @@ class KycService {
       ApiEndpoints.initiateIdentityVerification,
       data: request.toJson(),
       parser: KycInitiationData.fromJson,
+      requestExtra: {apiCallLabelKey: _initiateIdentityLabel},
     ),
   );
 
@@ -63,6 +111,7 @@ class KycService {
       ApiEndpoints.initiateGovernmentIdVerification,
       data: request.toJson(),
       parser: KycInitiationData.fromJson,
+      requestExtra: {apiCallLabelKey: _initiateGovernmentIdLabel},
     ),
   );
 
@@ -73,6 +122,7 @@ class KycService {
       ApiEndpoints.initiateUtilityBillUpload,
       data: request.toJson(),
       parser: UtilityBillUploadTarget.fromJson,
+      requestExtra: {apiCallLabelKey: _initiateUtilityBillLabel},
     ),
   );
 
@@ -83,6 +133,7 @@ class KycService {
     await _api.postData<UtilityBillCompletionData>(
       ApiEndpoints.completeUtilityBillUpload(verificationId),
       parser: UtilityBillCompletionData.fromJson,
+      requestExtra: {apiCallLabelKey: _completeUtilityBillLabel},
     ),
   );
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/core_api_endpoints.dart';
 import '../../../app/core_network.dart';
+import '../../../app/error_reporting.dart';
 import '../../../app/interceptors.dart';
 import '../../../app/network.dart';
 import '../../../app/services.dart';
@@ -34,6 +35,61 @@ class CoreAccountService {
   const CoreAccountService(this._api);
   final ApiService? _api;
 
+  static const _bankAccountsLabel = ApiCallLabel(
+    feature: 'accounts',
+    action: 'view_accounts',
+    stage: 'load',
+    endpoint: CoreApiEndpoints.bankAccounts,
+  );
+  static const _bankAccountLabel = ApiCallLabel(
+    feature: 'accounts',
+    action: 'view_account',
+    stage: 'load',
+    endpoint: CoreApiEndpoints.bankAccountTemplate,
+  );
+  static const _accountSummaryLabel = ApiCallLabel(
+    feature: 'accounts',
+    action: 'view_account_summary',
+    stage: 'load',
+    endpoint: CoreApiEndpoints.bankAccountSummaryTemplate,
+  );
+  static const _accountTransactionsLabel = ApiCallLabel(
+    feature: 'accounts',
+    action: 'view_transactions',
+    stage: 'load',
+    endpoint: CoreApiEndpoints.bankAccountTransactionsTemplate,
+  );
+  static const _accountStatementLabel = ApiCallLabel(
+    feature: 'accounts',
+    action: 'view_statement',
+    stage: 'load',
+    endpoint: CoreApiEndpoints.bankAccountStatementTemplate,
+  );
+  static const _bankProductsLabel = ApiCallLabel(
+    feature: 'accounts',
+    action: 'view_bank_products',
+    stage: 'load',
+    endpoint: CoreApiEndpoints.bankProducts,
+  );
+  static const _freezeLabel = ApiCallLabel(
+    feature: 'accounts',
+    action: 'freeze_account',
+    stage: 'submit',
+    endpoint: CoreApiEndpoints.bankAccountFreezeTemplate,
+  );
+  static const _unfreezeOtpLabel = ApiCallLabel(
+    feature: 'accounts',
+    action: 'unfreeze_account',
+    stage: 'send_otp',
+    endpoint: CoreApiEndpoints.bankAccountUnfreezeOtpTemplate,
+  );
+  static const _unfreezeLabel = ApiCallLabel(
+    feature: 'accounts',
+    action: 'unfreeze_account',
+    stage: 'submit',
+    endpoint: CoreApiEndpoints.bankAccountUnfreezeTemplate,
+  );
+
   Future<NotifierState<CustomerBankAccountsData>> getBankAccounts() async {
     final api = _api;
     if (api == null) return const NotifierState.blocked(_coreUnavailable);
@@ -41,6 +97,7 @@ class CoreAccountService {
       await api.getData<CustomerBankAccountsData>(
         CoreApiEndpoints.bankAccounts,
         parser: CustomerBankAccountsData.fromJson,
+        requestExtra: {apiCallLabelKey: _bankAccountsLabel},
       ),
     );
   }
@@ -61,6 +118,7 @@ class CoreAccountService {
         parser: (json) =>
             CustomerBankAccount.tryParse(json) ??
             (throw const FormatException('Invalid account.')),
+        requestExtra: {apiCallLabelKey: _bankAccountLabel},
       ),
     );
   }
@@ -79,6 +137,7 @@ class CoreAccountService {
       await api.getData<CoreAccountSummary>(
         CoreApiEndpoints.bankAccountSummary(accountNumber),
         parser: CoreAccountSummary.fromJson,
+        requestExtra: {apiCallLabelKey: _accountSummaryLabel},
       ),
     );
   }
@@ -108,6 +167,7 @@ class CoreAccountService {
           'pageSize': pageSize,
         },
         parser: CoreTransactionPage.fromJson,
+        requestExtra: {apiCallLabelKey: _accountTransactionsLabel},
       ),
     );
   }
@@ -139,6 +199,7 @@ class CoreAccountService {
           'toDate': formatCoreDateOnly(toDate),
         },
         parser: CoreAccountStatementReply.fromJson,
+        requestExtra: {apiCallLabelKey: _accountStatementLabel},
         receiveTimeout: _statementTimeout,
       ),
     );
@@ -175,6 +236,7 @@ class CoreAccountService {
       await api.getData<List<CoreBankProduct>>(
         CoreApiEndpoints.bankProducts,
         parser: CoreBankProduct.listFromJson,
+        requestExtra: {apiCallLabelKey: _bankProductsLabel},
       ),
     );
   }
@@ -187,6 +249,7 @@ class CoreAccountService {
     accountNumber,
     CoreApiEndpoints.bankAccountFreeze,
     CoreApiEndpoints.bankAccountFreezeTemplate,
+    _freezeLabel,
     {'transactionPin': transactionPin},
     AccountFreezeResult.fromJson,
   );
@@ -199,6 +262,7 @@ class CoreAccountService {
     accountNumber,
     CoreApiEndpoints.bankAccountUnfreezeOtp,
     CoreApiEndpoints.bankAccountUnfreezeOtpTemplate,
+    _unfreezeOtpLabel,
     null,
     UnfreezeOtpReply.fromJson,
   );
@@ -213,6 +277,7 @@ class CoreAccountService {
     accountNumber,
     CoreApiEndpoints.bankAccountUnfreeze,
     CoreApiEndpoints.bankAccountUnfreezeTemplate,
+    _unfreezeLabel,
     {'transactionPin': transactionPin, 'otpCode': otpCode},
     AccountFreezeResult.fromJson,
   );
@@ -224,6 +289,7 @@ class CoreAccountService {
     String accountNumber,
     String Function(String accountNumber) path,
     String template,
+    ApiCallLabel label,
     Map<String, Object?>? body,
     T Function(Object? json) parser,
   ) async {
@@ -236,7 +302,10 @@ class CoreAccountService {
       path(accountNumber),
       data: body,
       parser: parser,
-      requestExtra: {LoggingInterceptor.privacySensitivePathKey: template},
+      requestExtra: {
+        LoggingInterceptor.privacySensitivePathKey: template,
+        apiCallLabelKey: label,
+      },
     );
     if (response.status == ServiceStatus.success && response.data is T) {
       return FreezeSucceeded<T>(response.data as T);

@@ -1,10 +1,13 @@
 import 'dart:convert';
 
 import 'package:boctrust_savings_loan/app/app_router.dart';
+import 'package:boctrust_savings_loan/app/error_reporting.dart';
 import 'package:boctrust_savings_loan/helper/notification_navigator.dart';
 import 'package:boctrust_savings_loan/helper/notification_payload.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'support/recording_error_reporter.dart';
 
 RemoteMessage _message({
   String? messageId = 'msg-1',
@@ -187,6 +190,46 @@ void main() {
         {'id': '9'},
       );
     });
+  });
+
+  group('NotificationNavigator unknown route reporting', () {
+    tearDown(() => AppRouter.reporter = const NoopErrorReporter());
+
+    test(
+      'unknown route reports one routing nonfatal, navigation unchanged',
+      () {
+        final reporter = RecordingErrorReporter();
+        AppRouter.reporter = reporter;
+        final intent = NotificationNavigator.parse({
+          'route': '/promo-offer',
+          'id': 'secret-1',
+        });
+        expect(intent.routeName, AppRoutes.notifications);
+        final e = reporter.events.single;
+        expect(e.kind, ErrorKind.nonfatal);
+        expect(e.origin, ErrorOrigin.routing);
+        expect(e.reason, 'unknown_route');
+        expect(e.requestedRoute, '/promo-offer');
+        expect(e.error.toString(), 'routing unknown_route');
+        expect(e.stack, isNotNull);
+      },
+    );
+
+    test(
+      'missing or known route reports nothing; throwing reporter is safe',
+      () {
+        final reporter = RecordingErrorReporter();
+        AppRouter.reporter = reporter;
+        NotificationNavigator.parse({});
+        NotificationNavigator.parse({'route': AppRoutes.home});
+        expect(reporter.events, isEmpty);
+        reporter.throwOnReport = true;
+        expect(
+          NotificationNavigator.parse({'route': '/nope'}).routeName,
+          AppRoutes.notifications,
+        );
+      },
+    );
   });
 
   group('NotificationNavigator.parse', () {

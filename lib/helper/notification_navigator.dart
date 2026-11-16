@@ -1,4 +1,5 @@
 import '../app/app_router.dart';
+import '../app/error_reporting.dart';
 import '../app/navigators.dart';
 import '../app/route_arguments.dart';
 import '../module/app_flow/app_ui.dart';
@@ -16,12 +17,30 @@ class NotificationNavigator {
   static NotificationIntent parse(Map<String, dynamic> payload) {
     final route = _bounded(payload['route']);
     if (route == null || !AppRoutes.allRoutes.contains(route)) {
+      if (route != null) _reportUnknownRoute(route);
       return const NotificationIntent(routeName: AppRoutes.notifications);
     }
     return NotificationIntent(
       routeName: route,
       entityId: _bounded(payload['id']),
     );
+  }
+
+  /// Navigation falls back to notifications, so the router never sees the
+  /// unknown name; report it here instead (once per parse).
+  static void _reportUnknownRoute(String route) {
+    try {
+      AppRouter.reporter.report(
+        ErrorEvent(
+          kind: ErrorKind.nonfatal,
+          origin: ErrorOrigin.routing,
+          reason: 'unknown_route',
+          requestedRoute: safeRouteName(route),
+          error: const UnknownRouteError(),
+          stack: StackTrace.current,
+        ),
+      );
+    } catch (_) {}
   }
 
   static String? _bounded(Object? value) =>

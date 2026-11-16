@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/core_api_endpoints.dart';
 import '../../../app/core_network.dart';
+import '../../../app/error_reporting.dart';
 import '../../../app/network.dart';
 import '../../../app/services.dart';
 import '../model/core_check_progress.dart';
@@ -30,6 +31,97 @@ class CoreTransferService {
   const CoreTransferService(this._api);
   final ApiService? _api;
 
+  static const _initiateBoctrustLabel = ApiCallLabel(
+    feature: 'transfers',
+    action: 'send_boctrust_transfer',
+    stage: 'initiate',
+    endpoint: CoreApiEndpoints.intrabankTransferInitiate,
+  );
+  static const _verifyPinBoctrustLabel = ApiCallLabel(
+    feature: 'transfers',
+    action: 'send_boctrust_transfer',
+    stage: 'verify_pin',
+    endpoint: CoreApiEndpoints.intrabankTransferPinVerifyTemplate,
+  );
+  static const _resendOtpBoctrustLabel = ApiCallLabel(
+    feature: 'transfers',
+    action: 'send_boctrust_transfer',
+    stage: 'resend_otp',
+    endpoint: CoreApiEndpoints.intrabankTransferOtpResendTemplate,
+  );
+  static const _verifyOtpBoctrustLabel = ApiCallLabel(
+    feature: 'transfers',
+    action: 'send_boctrust_transfer',
+    stage: 'verify_otp',
+    endpoint: CoreApiEndpoints.intrabankTransferOtpVerifyTemplate,
+  );
+  static const _finalizeBoctrustLabel = ApiCallLabel(
+    feature: 'transfers',
+    action: 'send_boctrust_transfer',
+    stage: 'finalize',
+    endpoint: CoreApiEndpoints.intrabankTransferFinalizeTemplate,
+  );
+  static const _requeryBoctrustLabel = ApiCallLabel(
+    feature: 'transfers',
+    action: 'check_transfer_status',
+    stage: 'requery',
+    endpoint: CoreApiEndpoints.intrabankTransferRequeryTemplate,
+  );
+  static const _initiateInterbankLabel = ApiCallLabel(
+    feature: 'transfers',
+    action: 'send_bank_transfer',
+    stage: 'initiate',
+    endpoint: CoreApiEndpoints.interbankTransferInitiate,
+  );
+  static const _verifyPinInterbankLabel = ApiCallLabel(
+    feature: 'transfers',
+    action: 'send_bank_transfer',
+    stage: 'verify_pin',
+    endpoint: CoreApiEndpoints.interbankTransferPinVerifyTemplate,
+  );
+  static const _resendOtpInterbankLabel = ApiCallLabel(
+    feature: 'transfers',
+    action: 'send_bank_transfer',
+    stage: 'resend_otp',
+    endpoint: CoreApiEndpoints.interbankTransferOtpResendTemplate,
+  );
+  static const _verifyOtpInterbankLabel = ApiCallLabel(
+    feature: 'transfers',
+    action: 'send_bank_transfer',
+    stage: 'verify_otp',
+    endpoint: CoreApiEndpoints.interbankTransferOtpVerifyTemplate,
+  );
+  static const _finalizeInterbankLabel = ApiCallLabel(
+    feature: 'transfers',
+    action: 'send_bank_transfer',
+    stage: 'finalize',
+    endpoint: CoreApiEndpoints.interbankTransferFinalizeTemplate,
+  );
+  static const _requeryInterbankLabel = ApiCallLabel(
+    feature: 'transfers',
+    action: 'check_transfer_status',
+    stage: 'requery',
+    endpoint: CoreApiEndpoints.interbankTransferRequeryTemplate,
+  );
+  static const _getBanksLabel = ApiCallLabel(
+    feature: 'transfers',
+    action: 'send_bank_transfer',
+    stage: 'load_banks',
+    endpoint: CoreApiEndpoints.interbankBanks,
+  );
+  static const _nameEnquiryLabel = ApiCallLabel(
+    feature: 'transfers',
+    action: 'send_bank_transfer',
+    stage: 'lookup_recipient',
+    endpoint: CoreApiEndpoints.interbankNameEnquiry,
+  );
+  static const _getTransferStatusLabel = ApiCallLabel(
+    feature: 'transfers',
+    action: 'check_transfer_status',
+    stage: 'load',
+    endpoint: CoreApiEndpoints.interbankTransferStatusTemplate,
+  );
+
   static const _readUnavailable = 'Transfers are not available right now.';
 
   /// Records a pending BOCTRUST transfer. No money moves.
@@ -37,6 +129,7 @@ class CoreTransferService {
     BoctrustTransferDraft draft,
   ) => _initiate(
     CoreApiEndpoints.intrabankTransferInitiate,
+    _initiateBoctrustLabel,
     draft.amountKobo,
     draft.toJson(),
   );
@@ -46,12 +139,14 @@ class CoreTransferService {
     InterbankTransferDraft draft,
   ) => _initiate(
     CoreApiEndpoints.interbankTransferInitiate,
+    _initiateInterbankLabel,
     draft.amountKobo,
     draft.toJson(),
   );
 
   Future<NotifierState<CoreTransferInitiation>> _initiate(
     String path,
+    ApiCallLabel label,
     String amountKobo,
     Map<String, Object?> body,
   ) async {
@@ -71,6 +166,7 @@ class CoreTransferService {
         path,
         data: body,
         parser: CoreTransferInitiation.fromJson,
+        requestExtra: {apiCallLabelKey: label},
       ),
     );
   }
@@ -82,13 +178,15 @@ class CoreTransferService {
       !initiation.isExpiredAt(DateTime.now());
 
   Future<NotifierState<CoreCheckProgress>> _check(
-    String path, {
+    String path,
+    ApiCallLabel label, {
     Object? body,
   }) async => NotifierState.fromResponse(
     await _api!.postData<CoreCheckProgress>(
       path,
       data: body,
       parser: CoreCheckProgress.fromJson,
+      requestExtra: {apiCallLabelKey: label},
     ),
   );
 
@@ -108,6 +206,10 @@ class CoreTransferService {
           CoreApiEndpoints.intrabankTransferPinVerify(initiation.reference),
         CoreTransferKind.interbank =>
           CoreApiEndpoints.interbankTransferPinVerify(initiation.reference),
+      },
+      switch (kind) {
+        CoreTransferKind.intrabank => _verifyPinBoctrustLabel,
+        CoreTransferKind.interbank => _verifyPinInterbankLabel,
       },
       body: {'transactionPin': pin},
     );
@@ -129,8 +231,14 @@ class CoreTransferService {
       CoreTransferKind.interbank => CoreApiEndpoints.interbankTransferOtpResend(
         initiation.reference,
       ),
-    });
+    }, _resendOtpLabelFor(kind));
   }
+
+  static ApiCallLabel _resendOtpLabelFor(CoreTransferKind kind) =>
+      switch (kind) {
+        CoreTransferKind.intrabank => _resendOtpBoctrustLabel,
+        CoreTransferKind.interbank => _resendOtpInterbankLabel,
+      };
 
   /// Verifies the OTP the customer typed. It goes only in this request's
   /// body and is never kept.
@@ -149,6 +257,10 @@ class CoreTransferService {
         CoreTransferKind.interbank =>
           CoreApiEndpoints.interbankTransferOtpVerify(initiation.reference),
       },
+      switch (kind) {
+        CoreTransferKind.intrabank => _verifyOtpBoctrustLabel,
+        CoreTransferKind.interbank => _verifyOtpInterbankLabel,
+      },
       body: {'otpCode': otp},
     );
   }
@@ -164,14 +276,21 @@ class CoreTransferService {
     if (api == null || !_sendable(initiation)) {
       return const ServiceResponse.blocked(_readUnavailable);
     }
-    return api.postData<CoreTransferAck>(switch (kind) {
-      CoreTransferKind.intrabank => CoreApiEndpoints.intrabankTransferFinalize(
-        initiation.reference,
-      ),
-      CoreTransferKind.interbank => CoreApiEndpoints.interbankTransferFinalize(
-        initiation.reference,
-      ),
-    }, parser: CoreTransferAck.fromJson);
+    return api.postData<CoreTransferAck>(
+      switch (kind) {
+        CoreTransferKind.intrabank =>
+          CoreApiEndpoints.intrabankTransferFinalize(initiation.reference),
+        CoreTransferKind.interbank =>
+          CoreApiEndpoints.interbankTransferFinalize(initiation.reference),
+      },
+      parser: CoreTransferAck.fromJson,
+      requestExtra: {
+        apiCallLabelKey: switch (kind) {
+          CoreTransferKind.intrabank => _finalizeBoctrustLabel,
+          CoreTransferKind.interbank => _finalizeInterbankLabel,
+        },
+      },
+    );
   }
 
   Future<NotifierState<List<CommercialBank>>> getBanks() async {
@@ -181,6 +300,7 @@ class CoreTransferService {
       await api.getData<List<CommercialBank>>(
         CoreApiEndpoints.interbankBanks,
         parser: CommercialBank.listFromJson,
+        requestExtra: {apiCallLabelKey: _getBanksLabel},
       ),
     );
   }
@@ -202,6 +322,7 @@ class CoreTransferService {
         data: {'accountNumber': accountNumber, 'bankCode': bankCode},
         parser: NameEnquiryResult.fromJson,
         cancelToken: cancelToken,
+        requestExtra: {apiCallLabelKey: _nameEnquiryLabel},
       ),
     );
   }
@@ -216,6 +337,7 @@ class CoreTransferService {
       await api.getData<InterbankTransferStatus>(
         CoreApiEndpoints.interbankTransferStatus(reference),
         parser: InterbankTransferStatus.fromJson,
+        requestExtra: {apiCallLabelKey: _getTransferStatusLabel},
       ),
     );
   }
@@ -247,6 +369,12 @@ class CoreTransferService {
       await api.postData<CoreLiveTransferStatus>(
         path,
         parser: (json) => CoreLiveTransferStatus.fromJson(tracking.kind, json),
+        requestExtra: {
+          apiCallLabelKey: switch (tracking.kind) {
+            CoreTransferKind.intrabank => _requeryBoctrustLabel,
+            CoreTransferKind.interbank => _requeryInterbankLabel,
+          },
+        },
       ),
     );
   }

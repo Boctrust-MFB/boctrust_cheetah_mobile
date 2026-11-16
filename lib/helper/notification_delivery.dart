@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 
+import '../app/error_handlers.dart';
 import 'firebase_bootstrap.dart';
 import 'local_notification_service.dart';
 import 'notification_payload.dart';
@@ -28,7 +29,15 @@ LocalNotificationService backgroundNotificationService() =>
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) =>
     handleBackgroundMessage(
       message,
-      initializeFirebase: initializeFirebase,
+      initializeFirebase: () async {
+        final app = await initializeFirebase();
+        try {
+          installErrorHandlers(await createErrorReporter(firebaseReady: true));
+        } catch (_) {
+          // Reporting must never break message delivery.
+        }
+        return app;
+      },
       notifications: backgroundNotificationService,
     );
 
