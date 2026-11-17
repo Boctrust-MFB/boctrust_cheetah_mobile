@@ -7,10 +7,14 @@ class DojahConfig {
   const DojahConfig({
     required this.selfieWidgetId,
     required this.governmentWidgetId,
+    this.transferWidgetId = '',
   });
 
   final String selfieWidgetId;
   final String governmentWidgetId;
+  final String transferWidgetId;
+
+  String get transferLivenessWidgetId => transferWidgetId.trim();
 
   String widgetIdFor(KycOperation operation) => switch (operation) {
     KycOperation.identity => selfieWidgetId.trim(),
@@ -40,5 +44,6 @@ final dojahConfigProvider = Provider<DojahConfig>(
   (ref) => const DojahConfig(
     selfieWidgetId: Env.dojahSelfieWidgetId,
     governmentWidgetId: Env.dojahGovernmentWidgetId,
+    transferWidgetId: Env.dojahTransferWidgetId,
   ),
 );

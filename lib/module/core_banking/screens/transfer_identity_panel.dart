@@ -125,9 +125,7 @@ class _TransferIdentityPanelState extends ConsumerState<TransferIdentityPanel> {
     // Held directly: this panel may be gone by the time a reply arrives.
     final notifier = ref.read(coreTransferAttemptProvider.notifier);
     final id = widget.attempt.id;
-    final widgetId = ref
-        .read(dojahConfigProvider)
-        .widgetIdFor(KycOperation.identity);
+    final widgetId = ref.read(dojahConfigProvider).transferLivenessWidgetId;
     final messenger = ScaffoldMessenger.of(context);
     if (widgetId.isEmpty) {
       notifier.cancelReview(id);

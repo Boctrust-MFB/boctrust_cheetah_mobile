@@ -29,7 +29,7 @@ class _IdentityAttempt extends CoreTransferAttemptNotifier {
 }
 
 void main() {
-  testWidgets('transfer liveness opens the BVN selfie widget', (tester) async {
+  testWidgets('transfer liveness opens its dedicated widget', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -38,6 +38,7 @@ void main() {
             const DojahConfig(
               selfieWidgetId: 'bvn-selfie-widget',
               governmentWidgetId: 'government-widget',
+              transferWidgetId: 'large-withdrawal-widget',
             ),
           ),
           dojahPlatformRouteProvider.overrideWithValue(
@@ -68,7 +69,7 @@ void main() {
     final capture = tester.widget<DojahCaptureScreen>(
       find.byType(DojahCaptureScreen),
     );
-    expect(capture.widgetId, 'bvn-selfie-widget');
+    expect(capture.widgetId, 'large-withdrawal-widget');
     expect(capture.bvn, '00000000006');
   });
 }

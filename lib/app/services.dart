@@ -20,6 +20,9 @@ abstract final class Env {
   static const dojahGovernmentWidgetId = String.fromEnvironment(
     'DOJAH_GOVERNMENT_WIDGET_ID',
   );
+  static const dojahTransferWidgetId = String.fromEnvironment(
+    'DOJAH_TRANSFER_WIDGET_ID',
+  );
 
   /// Sends Dojah its sandbox BVN in place of the customer's, for both the BVN
   /// check and transfer liveness. Off unless `DOJAH_USE_SANDBOX_BVN=true`, and

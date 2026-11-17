@@ -1,32 +1,140 @@
 # Cheetah Savings & Payments App
 
-Cheetah is a Flutter savings and payments application shell implementing the UX reference in `agent_assets/source.html` through a modular Flutter architecture.
+Cheetah is a Flutter mobile app for BOCTRUST savings, payments, transfers, and
+account management. The app uses Riverpod for state, Dio for API transport, and
+separate User and Core services. The route registry and capability map decide
+which screens and actions a build can offer.
 
-## Run
+> [!NOTE]
+> A registered route is not necessarily an available operation. Some flows
+> require a Core URL, staging mode, a backend contract, or provider credentials.
+> See [Routes and availability](#routes-and-availability).
 
-```sh
-flutter pub get
-flutter run --dart-define-from-file=.env.stage
+## At a glance
+
+| Area | Source of truth |
+| --- | --- |
+| Startup and app root | [`lib/main.dart`](lib/main.dart), [`lib/app.dart`](lib/app.dart) |
+| Named routes and access | [`lib/app/app_router.dart`](lib/app/app_router.dart), [`lib/module/app_flow/route_definitions.dart`](lib/module/app_flow/route_definitions.dart) |
+| Feature gates | [`lib/app/feature_capability.dart`](lib/app/feature_capability.dart) |
+| User and Core endpoints | [`lib/app/api_endpoints.dart`](lib/app/api_endpoints.dart), [`lib/app/core_api_endpoints.dart`](lib/app/core_api_endpoints.dart) |
+| Configuration | [`lib/app/services.dart`](lib/app/services.dart), [`.env.example`](.env.example) |
+
+## Setup
+
+1. Install Flutter **3.44.6** (Dart **3.12.2**). For iOS, install Xcode and an
+   iOS simulator; iOS deployment starts at **15.0**.
+2. Fetch packages and copy the example configuration:
+
+   ```sh
+   flutter pub get
+   cp .env.example .env.stage
+   ```
+
+3. Set `ENV=staging`, a valid User Service `BASE_URL`, `SITE_URL`, and a unique
+   `SECURE_STORAGE_NAMESPACE`. Set `CORE_BASE_URL` to enable Core-backed flows.
+   Supply the Dojah widget IDs for KYC and transfer liveness used in this
+   environment. Environment files are gitignored; do not commit real values.
+4. For Smile ID capture, have the environment's secret-delivery process place
+   `assets/json/smile_config.json` before building. See
+   [`assets/json/README.md`](assets/json/README.md).
+5. Start a device or simulator, then run:
+
+   ```sh
+   flutter run --dart-define-from-file=.env.stage
+   ```
+
+The app requires a reachable backend for signed-in flows. An empty
+`CORE_BASE_URL` is allowed, but Core capabilities are unavailable. Firebase
+initialization failure does not prevent login or app startup.
+
+### Build-time configuration
+
+| Key | Purpose |
+| --- | --- |
+| `ENV` | `staging` or `prod`; validated at bootstrap. |
+| `BASE_URL` | HTTPS User Service root ending in `/api`; the app appends `/v1`. |
+| `CORE_BASE_URL` | Optional HTTPS Core Service root ending in `/api`; the app appends `/v1`. |
+| `SITE_URL` | HTTPS public site root for legal pages. |
+| `SECURE_STORAGE_NAMESPACE` | Separates stored sessions between environments. |
+| `DOJAH_SELFIE_WIDGET_ID` | BVN selfie/liveness widget. |
+| `DOJAH_GOVERNMENT_WIDGET_ID` | Government ID widget. |
+| `DOJAH_TRANSFER_WIDGET_ID` | Large-transfer liveness widget. |
+| `DOJAH_USE_SANDBOX_BVN` | `true` substitutes Dojah's sandbox BVN in staging only. |
+| `CRASHLYTICS_ENABLED` | Enables collection only in a supported, non-debug build with Firebase ready; see the [runbook](docs/crashlytics-runbook.md). |
+
+Configuration is read with Dart compile-time defines in
+[`lib/app/services.dart`](lib/app/services.dart); changing a file requires a new
+run or build. Use a separate namespace for each environment to avoid session
+reuse across backends.
+
+## Infrastructure
+
+```mermaid
+flowchart LR
+    Device[Flutter app] --> Router[Route registry + private route gate]
+    Router --> State[Riverpod feature providers]
+    State --> User[Dio: User Service /api/v1]
+    State --> Core[Dio: Core Service /api/v1]
+    User --> Auth[Auth, profile, KYC, withdrawal banks]
+    Core --> Banking[Accounts, savings, transfers, bills]
+    Device --> Secure[Namespaced secure storage]
+    Device --> Prefs[SharedPreferences]
+    Device --> Firebase[Firebase Messaging + Crashlytics]
+    Device --> Identity[Dojah / Smile ID capture]
 ```
 
-The staging configuration must define `ENV=staging`,
-`BASE_URL=https://user-dev-api.centurysoftware.dev/api`, and an environment-
-specific `SECURE_STORAGE_NAMESPACE`. `SITE_URL=https://boctrustmfb.com`
-provides the public privacy policy and terms shown in the app. KYC builds also define
-`DOJAH_SELFIE_WIDGET_ID` and `DOJAH_GOVERNMENT_WIDGET_ID` with the published
-widget for each environment. Copy `.env.example` for a new local setup;
-environment files remain gitignored.
-Bank transfer liveness uses the same `DOJAH_SELFIE_WIDGET_ID` as BVN liveness.
-`DOJAH_USE_SANDBOX_BVN=true` makes staging send Dojah its sandbox BVN
-(`22222222222`) instead of the customer's, for both checks. Leave it out of
-production files; a non-staging build ignores it even if set.
+Both API clients use the signed-in User Service bearer token. A User Service
+session expiry clears the local session; a Core `401` is reported as a Core
+error and does not sign the customer out. Network clients use 30-second default
+timeouts, response mapping, request logging, and error classification.
+`lib/module/` contains feature-specific models, services, providers, and
+screens; `lib/module/component/` contains reusable UI; `lib/helper/` contains
+device integrations and secure storage; `lib/utils/` contains formatting and
+validation helpers.
 
-`CORE_BASE_URL=https://core-dev-api.centurysoftware.dev/api` points at the
-separate Core Service (accounts, products, transfers, bills) and follows the
-same `/api` convention; the app appends `/v1`. It is optional: left blank, the
-app boots, every User Service feature works, and every Core-backed capability
-is unavailable. Core requests carry the signed-in User Service bearer token,
-but a Core `401` never signs the customer out.
+The repository includes Android, iOS, web, Windows, macOS, and Linux Flutter
+targets. Native KYC capture needs a physical device. iOS dependencies use
+Swift Package Manager; the local Dojah plugin is Android-only and iOS opens
+Dojah's hosted flow in a WebView.
+
+## Routes and availability
+
+Routes below are **client navigation paths**, not HTTP API endpoints. The
+complete registry is [`appRouteDefinitions`](lib/module/app_flow/route_definitions.dart);
+`AppRoutes.allRoutes`, public routes, and private routes are derived from it.
+Most routes require a restored session and first PIN. Public routes cover entry,
+authentication, first-PIN setup, legal content, and support placeholders.
+
+```mermaid
+flowchart TD
+    Boot["/bootstrap"] -->|valid session| Pin{First PIN created?}
+    Boot -->|no session| Login["/onboarding or /login"]
+    Login --> Pin
+    Pin -->|no| Create["/onboarding/create-pin"]
+    Pin -->|yes| Home["/home"]
+    Create --> Home
+    Home --> Tabs["/savings · /send · /payments · /account"]
+```
+
+| Route group | Representative paths | What it opens |
+| --- | --- | --- |
+| Entry and auth | `/bootstrap`, `/onboarding`, `/onboarding/otp`, `/login`, `/login/password-reset` | Session restore, signup, sign-in, recovery. |
+| Main tabs | `/home`, `/savings`, `/send`, `/payments`, `/account` | Bottom navigation sections. |
+| Savings and funding | `/savings/flex`, `/savings/target`, `/savings/lock`, `/savings/group`, `/wallet/add-money` | Balances, products, plan flows, funding details. Some actions remain gated. |
+| Transfers and activity | `/send/own-account`, `/send/beneficiary`, `/send/other-bank`, `/send/scan-to-pay`, `/transactions`, `/transaction/receipt` | Core-backed transfer, activity, and receipt flows when capabilities are enabled. |
+| Payments | `/payments/airtime`, `/payments/data`, `/payments/billers/electricity`, `/payments/bill-pay` | Core-backed bill and top-up flows, gated by staging and configuration. |
+| Account and KYC | `/account/tier`, `/account/tier/government-id`, `/account/linked-banks`, `/account/security`, `/account/limits` | Identity, linked banks, security, and limits. |
+| Other | `/notifications`, `/account/legal/privacy`, `/account/loans`, `/account/cards` | Notification placeholder, legal pages, and coming-soon products. |
+
+[`featureAvailabilityProvider`](lib/app/feature_capability.dart) evaluates
+the capability requirements. Core transfers, payments, beneficiaries, account
+activity, and several savings actions are currently **staging-only** and also
+need `CORE_BASE_URL`. Card funding, hosted checkout, and some savings actions
+have explicit unavailable screens. Loans and Cards are coming soon. Consult
+the capability map before treating any registered route as a live operation.
+
+## Platform and identity setup
 
 ### iOS build setup
 
@@ -96,26 +204,6 @@ not depend on that flag: `auth_token`, `partner_id`, the Smile config, the Smile
 `lib/app/interceptors.dart`. Do not move a value out of that set to make
 debugging easier.
 
-## Verify
-
-```sh
-flutter analyze
-dart format --output=none --set-exit-if-changed lib test
-flutter test
-```
-
-`flutter analyze` is expected to report no issues.
-
-### Physical-device testing
-
-The Dojah and Smile ID capture flows use native camera views and cannot be
-exercised by `flutter test` or a simulator. Before releasing a change to the KYC
-journey, verify both providers on one physical Android and one physical iOS
-device: initialization failure and retry, camera and microphone permission
-denied and re-granted, selfie liveness, a successful Voter ID capture, user
-cancellation, a native SDK error, submission acknowledgement, delayed and
-failed webhooks, manual refresh, background/resume refresh, and logout cleanup.
-
 ### Government-ID documents
 
 The government-ID form is driven by two authenticated User Service reads,
@@ -144,90 +232,53 @@ environment inputs because the provider config does not publish them, and the
 Dojah webhook is backend-only. Smile ID v12 token retrieval waits for the
 backend to publish token expiry (`expiresAt` or `expiresInSeconds`).
 
-## Architecture
+## Verify
 
-- `lib/app/` contains app bootstrap, routing, navigation, theme, networking, interceptors, and service response primitives.
-- `lib/helper/` contains cross-cutting secure storage and notification helpers.
-- `lib/module/` contains vertical feature slices and shared UI components.
-- `lib/utils/` contains validators, formatters, enums, form helpers, and formatting utilities.
+```sh
+flutter analyze
+dart format --output=none --set-exit-if-changed lib test
+flutter test
+```
+
+`flutter analyze` is expected to report no issues.
+
+### Physical-device testing
+
+The Dojah and Smile ID capture flows use native camera views and cannot be
+exercised by `flutter test` or a simulator. Before releasing a change to the KYC
+journey, verify both providers on one physical Android and one physical iOS
+device: initialization failure and retry, camera and microphone permission
+denied and re-granted, selfie liveness, a successful Voter ID capture, user
+cancellation, a native SDK error, submission acknowledgement, delayed and
+failed webhooks, manual refresh, background/resume refresh, and logout cleanup.
+
+## Repository map
+
+```text
+lib/
+├── app/                 bootstrap, routing, API clients, theme, capability gates
+├── helper/              secure storage, Firebase, notifications, device helpers
+├── module/              feature slices and shared UI components
+├── utils/               validation and formatting
+└── main.dart             process startup
+test/                     unit and widget tests
+packages/dojah_kyc_sdk_flutter/  local Android Dojah plugin
+assets/                   fonts, images, SVGs, runtime JSON directory
+docs/                     contract notes, verification records, runbooks
+.github/workflows/        Flutter quality and iOS build checks
+```
 
 ## UI conventions
 
-- Plus Jakarta Sans is the only application font and is applied by the root
-  `ThemeData` for every route.
-- System, light, and dark mode are owned by the Riverpod theme controller and
-  persisted with `SharedPreferences`.
-- Screens use semantic, mode-aware colors from the theme extension instead of
-  hard-coded light surfaces.
-- Brand artwork and remote images are deliberately represented by simple icon
-  placeholders until final assets are supplied.
-- Reusable cards, buttons, fields, spacing, and bottom navigation live in the
-  shared component layer; feature screens should compose those primitives.
+The root theme applies Plus Jakarta Sans, light and dark palettes, and the
+Riverpod theme preference. `SharedPreferences` persists device preferences;
+secure storage holds namespaced session data. Shared buttons, cards, fields,
+spacing, and navigation components live in `lib/module/component/`.
 
-## Routing and authentication
+## More detail
 
-The app starts at a session bootstrap route. It restores a valid namespaced
-secure-storage session, loads the authenticated profile, and then routes to
-first-PIN creation or Home. Expired and malformed sessions are cleared locally.
-Signup, password recovery, new-device approval, logout, profile, tier, and
-security-secret flows use the staging User API.
-
-## Backend-contract blockers
-
-### Savings integration
-
-Savings and Flex share the authenticated Home aggregate (`GET /users/me/home`)
-with Home. The screens display the returned wallet balance/status and validated
-product names. Catalogue entries are product descriptions, not customer-owned
-plans. Rates, minimum deposits, earnings and history remain hidden until their
-contracts are defined.
-
-Add money and bank-transfer routes show the user's current virtual-account
-details. Entering funding refreshes the aggregate; Copy is enabled only after a
-successful load with an available account, bank and account number. A failed
-refresh keeps prior details visible with a warning and disables Copy. No client
-action marks a transfer as completed.
-
-Direct Savings routes restore authentication and require the current user's
-profile and first transaction PIN. Home requests are shared while in flight and
-discarded on session changes. Target, Fixed Deposit, Group, statements,
-withdrawals, auto-save and card funding show unavailable states because this
-User API does not publish those operations. Their URLs remain registered.
-
-Focused checks: `flutter test test/savings_provider_test.dart
-test/savings_product_data_test.dart test/savings_access_test.dart
-test/savings_ui_test.dart test/savings_live_ui_test.dart`.
-These use synthetic transport responses; authenticated staging-device
-verification is a separate release check.
-
-The User API is wired for its documented mobile endpoints. Product areas with
-no contract in that API remain explicitly unavailable.
-
-| Area | Missing contract | Current behavior | Replacement steps |
-|---|---|---|---|
-| Firebase native setup | Staging Android and iOS Firebase application files | FCM initialization fails closed; login and the rest of bootstrap continue | Supply `google-services.json` and `GoogleService-Info.plist` for the staging Firebase project. |
-| Tier 1 webhook | Whether the identity webhook processes a Biometric KYC (job 1) result | Capture works: consent, ID confirmation, selfie and liveness all submit to Smile. The verification then stays `pending` — `hasLivenessSelfie` does not flip and the tier does not move | Backend handles the job-1 callback, sets both identity flags, and upgrades Tier 1. See `plan/BACKEND_TIER1_BIOMETRIC_KYC_SERVER_PLAN.md` Task 4. |
-| Resuming an interrupted government-ID job | 409 does not return the existing `smileUserId`, `smileJobId`, and `callbackUrl` | Capture reopens from the in-memory initiation. After a process restart nothing can reopen it, and the card says a verification is already in progress and offers Refresh | Backend returns the existing job context on 409. Pinned by a test in `test/kyc_government_id_flow_test.dart`. |
-| Next of kin | Submission endpoint | Route states plainly that it is a later step | Add a typed submission endpoint. |
-| Group Save invitations and schedules | Invitation, contribution schedule, roles, missed-payment endpoints | Group routes show blocked integration state where needed | Add typed models and service methods. |
-| Card funding | Paystack/provider handoff and callback contract | Card funding route shell marked blocked | Wire WebView URL creation and callback parser. |
-| Transfers, airtime, data, and bills | Core publishes the endpoints, but bank-list, name-enquiry, biller, category and payment-item responses have no attached schema; there is no transaction-bound authorization, idempotency rule, or success/status enum (see `docs/verification/core-banking-integration.md`) | Send and Pay hubs stay navigable, but every transfer, airtime, data, biller, authorization, and receipt route shows an unavailable state. No form, PIN, recipient, or receipt is shown | Add the transaction contract first; receipts may only render confirmed server data. `/auth/pin/verify-current` is not a substitute for transaction authorization. |
-| Scan to pay | A payment contract of its own; Core name-enquiry response schema (see Transfers row) | Staging only. The account number and bank name are read from a photo on the device and the photo is deleted after use; nothing is uploaded. Continue stays disabled until Core name enquiry confirms the recipient. There is no payment step here: transfers go through the existing transfer screens, which remain unavailable until the transaction contract exists | Publish the transfer contract; no scan-specific payment endpoint is needed. |
-| Transaction history and payment checkout | Transaction list and hosted-checkout contracts | `/transactions` and `/payment/webview` show unavailable states | Replace with service-backed state. |
-| Beneficiaries | CRUD endpoint details | Account route shows an unavailable state with no sample recipients | Replace with service-backed provider state. |
-| Notification history | Authenticated inbox, pagination, stable IDs, read state, validated deep links | Notifications route states history is unavailable. It neither lists activity nor claims the inbox is empty. Push delivery and deep-link parsing are unchanged | Add the inbox contract. |
-| Loan and card launch subscriptions | Persisted subscription, consent/channel, unsubscribe | Loans and Cards say "Coming soon" and that launch notifications are not available; no subscription is offered | Add the subscription contract before offering a notify-me action. |
-| Withdrawals | No transfer or payout operation is published | Withdrawal accounts can be listed, resolved, saved, and deleted, but no money movement is offered | Add the payout endpoint before building any withdrawal action. |
-
-## UX parity checklist
-
-- Home, Save, Send, Pay, and Account tabs are registered.
-- Onboarding, verification, OTP, password, login, password reset, and new-device OTP routes are registered.
-- Home, Savings and Flex render balances and the product catalogue from the Core Service; Add money keeps the User Service virtual account. Target, Lock, Group and unsupported Savings action routes show availability states.
-- Scan to pay (staging only) reads an account number and bank name on the device and needs Core name enquiry before continuing; it has no payment contract and hands off to the transfer screens.
-- Live: Add Money and bank-transfer funding (virtual-account details), linked withdrawal bank accounts (list, resolve, save, delete), KYC tiers, login, and PIN flows.
-- Unavailable (routes registered, honest unavailable state): card funding, own-account/beneficiary/other-bank transfers, airtime, data, all biller categories, bill pay, transaction authorization, receipts (including `/transaction/receipt/demo`), transaction history, payment webview, and beneficiaries.
-- There is no live transaction service and no notification-history service. No route fabricates a transaction, recipient, receipt, or notification.
-- Loans and Cards (including the `notify-me` compatibility routes) show "Coming soon" without a subscription action.
-- Notification deep links still parse; unknown routes fall back to Notifications.
-- Linked-bank form: the visible bank and account number always match the draft that Check and Save use, across navigation, save, and delete.
+- [Core banking integration notes](docs/verification/core-banking-integration.md)
+- [iOS Swift Package Manager verification](docs/verification/ios-swift-package-manager.md)
+- [Dojah KYC verification](docs/verification/dojah-kyc.md)
+- [Crashlytics runbook](docs/crashlytics-runbook.md)
+- [Current endpoint gaps](docs/endpoint-gaps-2026-10-14.md)
