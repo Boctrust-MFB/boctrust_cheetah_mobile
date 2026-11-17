@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../../app/api_logger.dart';
 import '../../../app/app_router.dart';
+import '../../../app/app_version_label.dart';
 import '../../../app/boc_icons.dart';
 import '../../../app/feature_capability.dart';
 import '../../../app/services.dart';
@@ -268,6 +269,8 @@ extension HomeScreenParts on FlowPageState {
             _homeTransactionsSection(
               accountsState.data?.flexAccount?.accountNumber,
             ),
+            const SizedBox(height: BocSpace.md),
+            const AppVersionLabel(),
           ],
         ),
       ),
