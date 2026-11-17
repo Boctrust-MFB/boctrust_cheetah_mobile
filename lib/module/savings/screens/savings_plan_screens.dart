@@ -709,6 +709,7 @@ extension SavingsPlanScreens on FlowPageState {
     await ref
         .read(savingsReminderServiceProvider)
         .setContributionChoice(plan.id, picked);
+    if (!mounted) return;
     ref.invalidate(contributionReminderChoiceProvider(plan.id));
   }
 
