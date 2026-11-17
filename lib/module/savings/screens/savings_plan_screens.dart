@@ -533,6 +533,13 @@ extension SavingsPlanScreens on FlowPageState {
                         (label: 'Tenor', value: '$days days'),
                     ],
                   ),
+                  if (plan.status == SavingsPlanStatus.active &&
+                      plan.type == SavingsProductType.smartSave &&
+                      plan.recurringAmount != null &&
+                      plan.saveFrequency != null) ...[
+                    const SizedBox(height: BocSpace.sm),
+                    _contributionReminderRow(plan),
+                  ],
                   if (plan.accruedInterest != null ||
                       plan.interestEarned != null ||
                       plan.projectedInterest != null) ...[
@@ -653,6 +660,57 @@ extension SavingsPlanScreens on FlowPageState {
           SnackBar(content: Text(state.message ?? 'Request failed.')),
         );
     }
+  }
+
+  Widget _contributionReminderRow(SavingsPlan plan) {
+    final choice =
+        ref.watch(contributionReminderChoiceProvider(plan.id)).value ??
+        ContributionReminderChoice.off;
+    final theme = Theme.of(context);
+    return Material(
+      color: context.bocColors.surface,
+      borderRadius: BorderRadius.circular(BocRadius.md),
+      clipBehavior: Clip.antiAlias,
+      child: ListTile(
+        title: Text('Contribution reminder', style: theme.textTheme.bodySmall),
+        subtitle: Text(choice.label, style: theme.textTheme.titleSmall),
+        trailing: const Icon(IconsaxPlusLinear.arrow_right_3, size: 18),
+        onTap: () => _chooseContributionReminder(plan, choice),
+      ),
+    );
+  }
+
+  Future<void> _chooseContributionReminder(
+    SavingsPlan plan,
+    ContributionReminderChoice current,
+  ) async {
+    final picked = await AppActionSheet.show<ContributionReminderChoice>(
+      context: context,
+      builder: (sheetContext) => AppActionSheet(
+        icon: IconsaxPlusLinear.notification,
+        title: 'Contribution reminder',
+        subtitle: 'When should we remind you about your auto-save?',
+        child: Column(
+          children: [
+            for (final option in ContributionReminderChoice.values)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(option.label),
+                trailing: option == current
+                    ? const Icon(IconsaxPlusLinear.tick_circle, size: 20)
+                    : null,
+                onTap: () => Navigator.of(sheetContext).pop(option),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || picked == current) return;
+    await ref
+        .read(savingsReminderServiceProvider)
+        .setContributionChoice(plan.id, picked);
+    if (!mounted) return;
+    ref.invalidate(contributionReminderChoiceProvider(plan.id));
   }
 
   Future<void> _topUpPlan(SavingsPlan plan) async {

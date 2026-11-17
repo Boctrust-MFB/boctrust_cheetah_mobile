@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +9,7 @@ import '../../core_banking/provider/core_account_activity_providers.dart';
 import '../../core_banking/provider/flex_source_check.dart';
 import '../model/savings_plan_models.dart';
 import '../service/core_savings_plan_service.dart';
+import '../service/savings_reminder_service.dart';
 import 'savings_plan_provider.dart';
 
 /// Where a plan action stands. [unknown] means Core may or may not have
@@ -190,6 +193,10 @@ class SavingsPlanActionNotifier extends Notifier<SavingsPlanActionState> {
         gate,
       );
     } finally {
+      // Sync only trusts Core's lists, so it runs whatever the outcome.
+      if (ref.mounted) {
+        unawaited(ref.read(savingsReminderServiceProvider).sync());
+      }
       link.close();
     }
   }

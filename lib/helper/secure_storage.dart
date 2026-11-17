@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../app/services.dart';
 import '../module/onboarding/model/auth_session.dart';
+import '../module/savings/model/savings_reminder.dart';
 
 final secureStorageProvider = Provider<SecureStorage>((ref) => SecureStorage());
 
@@ -180,4 +181,30 @@ class SecureStorage {
     value: value,
     iOptions: _biometricAppleOptions,
   );
+
+  String _savingsRemindersKey(String userId) =>
+      '$_prefix.savings_reminders.$userId';
+
+  /// The signed-in user's savings reminder record; missing or corrupt reads
+  /// as empty.
+  Future<SavingsReminderRecord> readSavingsReminders(String userId) async {
+    try {
+      final raw = await _storage.read(key: _savingsRemindersKey(userId));
+      if (raw == null) return SavingsReminderRecord.empty;
+      return SavingsReminderRecord.fromJson(jsonDecode(raw));
+    } catch (_) {
+      return SavingsReminderRecord.empty;
+    }
+  }
+
+  Future<void> writeSavingsReminders(
+    String userId,
+    SavingsReminderRecord record,
+  ) => _storage.write(
+    key: _savingsRemindersKey(userId),
+    value: jsonEncode(record.toJson()),
+  );
+
+  Future<void> deleteSavingsReminders(String userId) =>
+      _storage.delete(key: _savingsRemindersKey(userId));
 }

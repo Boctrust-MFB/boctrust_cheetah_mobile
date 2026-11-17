@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../module/account/provider/account_deletion_provider.dart';
@@ -12,6 +14,7 @@ import '../module/home/provider/home_provider.dart';
 import '../module/kyc/provider/kyc_configuration_provider.dart';
 import '../module/kyc/provider/kyc_providers.dart';
 import '../module/kyc/provider/kyc_status_provider.dart';
+import '../module/savings/service/savings_reminder_service.dart';
 import '../module/send/provider/transaction_provider.dart';
 
 /// Drops every feature's per-user state, so the next account signed in on this
@@ -46,4 +49,5 @@ void clearPrivateUserState(Ref ref) {
   ref.read(withdrawalBankAccountsProvider.notifier).clear();
   ref.read(withdrawalBankDraftProvider.notifier).clear();
   ref.read(transactionLimitUpdateProvider.notifier).reset();
+  unawaited(ref.read(savingsReminderServiceProvider).cancelAllScheduled());
 }
