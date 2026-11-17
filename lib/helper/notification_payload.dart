@@ -6,12 +6,14 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 ///
 /// Remote title, body and arbitrary data are never retained: the visible copy
 /// is always [title] and [body], and only bounded `route`/`id` strings survive.
+/// The local-only `action` is never read from a remote message.
 class NotificationPayload {
   const NotificationPayload._({
     required this.notificationId,
     required this.hasNotificationContent,
     this.route,
     this.id,
+    this.action,
   });
 
   factory NotificationPayload.fromRemoteMessage(
@@ -46,18 +48,21 @@ class NotificationPayload {
   final String? route;
   final String? id;
 
+  /// Local-only: remote messages never carry an action.
+  final String? action;
+
   bool get isDisplayable =>
       hasNotificationContent || route != null || id != null;
 
   /// The local-notification tap payload, or null when there is nothing to
   /// route.
   String? toLocalPayload() {
-    if (route == null && id == null) return null;
-    return jsonEncode({'route': ?route, 'id': ?id});
+    if (route == null && id == null && action == null) return null;
+    return jsonEncode({'route': ?route, 'id': ?id, 'action': ?action});
   }
 
   /// Decodes a local-notification tap payload into the normalized
-  /// `route`/`id` map, or null when it is absent, malformed or oversized.
+  /// `route`/`id`/`action` map, or null when it is absent, malformed or oversized.
   static Map<String, String>? decodeLocalPayload(String? raw) {
     if (raw == null || raw.isEmpty || raw.length > maxSerializedLength) {
       return null;
@@ -71,7 +76,8 @@ class NotificationPayload {
     if (decoded is! Map) return null;
     final route = _field(decoded['route']);
     final id = _field(decoded['id']);
-    return {'route': ?route, 'id': ?id};
+    final action = _field(decoded['action']);
+    return {'route': ?route, 'id': ?id, 'action': ?action};
   }
 
   /// 32-bit FNV-1a of [value], masked to a positive non-zero int.
@@ -83,6 +89,16 @@ class NotificationPayload {
     }
     return _positive(hash & _mask);
   }
+
+  /// A payload for a locally raised notification, which may carry an action.
+  static String? localPayload({String? route, String? id, String? action}) =>
+      NotificationPayload._(
+        notificationId: 0,
+        hasNotificationContent: false,
+        route: _field(route),
+        id: _field(id),
+        action: _field(action),
+      ).toLocalPayload();
 
   static int _positive(int value) => value == 0 ? 1 : value;
 

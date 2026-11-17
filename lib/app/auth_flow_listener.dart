@@ -6,11 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../helper/app_open_recency.dart';
 import '../helper/fcm_service.dart';
 import '../helper/local_notification_service.dart';
+import '../helper/notification_actions.dart';
 import '../helper/notification_navigator.dart';
 import '../module/core_banking/provider/biometric_transfer_provider.dart';
 import '../module/onboarding/provider/auth_session_provider.dart';
 import '../module/onboarding/provider/biometric_login_provider.dart';
 import '../module/onboarding/provider/fcm_token_provider.dart';
+import 'api_logger.dart';
 import 'app_router.dart';
 import 'auth_navigation_provider.dart';
 import 'navigators.dart';
@@ -94,7 +96,7 @@ class _AuthFlowListenerState extends ConsumerState<AuthFlowListener>
       });
     });
     ref.listen(fcmNotificationOpenedProvider, (_, next) {
-      next.whenData((message) => _dispatchNotification(message.data));
+      next.whenData((message) => _dispatchRemoteNotification(message.data));
     });
     ref.listen(localNotificationTapProvider, (_, next) {
       next.whenData(_dispatchNotification);
@@ -131,19 +133,36 @@ class _AuthFlowListenerState extends ConsumerState<AuthFlowListener>
     try {
       final message = await ref.read(fcmServiceProvider).getInitialMessage();
       if (message == null || !mounted) return;
-      _dispatchNotification(message.data);
+      _dispatchRemoteNotification(message.data);
     } catch (_) {
       // Notification-open failures never affect auth or app bootstrap.
     }
   }
 
+  /// FCM data never reaches the action registry: only local payloads may
+  /// carry an action.
+  void _dispatchRemoteNotification(Map<String, dynamic> data) =>
+      _dispatchNotification(Map<String, dynamic>.from(data)..remove('action'));
+
   void _dispatchNotification(Map<String, dynamic> payload) {
+    final action = payload['action'];
+    if (action is String) {
+      final handler = ref.read(notificationActionHandlersProvider)[action];
+      if (handler == null) {
+        apiLogger.w('Dropped notification with unknown action');
+        return;
+      }
+      if (!handler.requiresSession) {
+        _runAction(handler, payload);
+        return;
+      }
+    }
     if (ref.read(authSessionProvider) == null ||
         !_authenticatedDestinationReady) {
       _pendingNotification = Map<String, dynamic>.from(payload);
       return;
     }
-    unawaited(NotificationNavigator.dispatch(payload));
+    _deliver(payload);
   }
 
   void _markAuthenticatedDestinationReady() {
@@ -152,7 +171,33 @@ class _AuthFlowListenerState extends ConsumerState<AuthFlowListener>
     final payload = _pendingNotification;
     if (payload == null) return;
     _pendingNotification = null;
-    unawaited(NotificationNavigator.dispatch(payload));
+    _dispatchNotification(payload);
+  }
+
+  void _deliver(Map<String, dynamic> payload) {
+    final action = payload['action'];
+    final handler = action is String
+        ? ref.read(notificationActionHandlersProvider)[action]
+        : null;
+    if (handler != null) {
+      _runAction(handler, payload);
+    } else {
+      unawaited(NotificationNavigator.dispatch(payload));
+    }
+  }
+
+  void _runAction(
+    NotificationActionHandler handler,
+    Map<String, dynamic> payload,
+  ) {
+    final argument = payload['id'];
+    unawaited(
+      handler.run(argument is String ? argument : null).catchError((
+        Object error,
+      ) {
+        apiLogger.w('Notification action failed: ${error.runtimeType}');
+      }),
+    );
   }
 
   void _scheduleDrain() {
