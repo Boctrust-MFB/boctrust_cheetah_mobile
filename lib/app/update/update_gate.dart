@@ -68,10 +68,10 @@ class _AppUpdateScopeState extends ConsumerState<AppUpdateScope>
   @override
   Future<bool> didPopRoute() async => _isRequired(ref);
 
-  // Claiming the gesture stops WidgetsBinding falling back to handlePopRoute
-  // when it ends. Other observers that also claim it (the navigator) still
-  // receive the gesture callbacks, so a predictive back animation may start;
-  // the pop itself is swallowed by didPopRoute above.
+  // While gated, [UpdateGate] removes the predictive-back route transition,
+  // so this is the only observer that claims the gesture. Its commit is then
+  // delivered here, where nothing happens, instead of popping a route or
+  // falling back to handlePopRoute.
   @override
   bool handleStartBackGesture(PredictiveBackEvent backEvent) =>
       _isRequired(ref);
@@ -92,21 +92,37 @@ class UpdateGate extends ConsumerWidget {
     final required =
         ref.watch(appUpdateControllerProvider.select((s) => s.decision.kind)) ==
         UpdateKind.required;
+    final theme = Theme.of(context);
     // Same tree either way, so toggling the gate never remounts [child].
     return Stack(
       fit: StackFit.passthrough,
       children: [
-        ExcludeSemantics(
-          excluding: required,
-          child: ExcludeFocus(
+        Theme(
+          data: required ? _withoutPredictiveBack(theme) : theme,
+          child: ExcludeSemantics(
             excluding: required,
-            child: AbsorbPointer(absorbing: required, child: child),
+            child: ExcludeFocus(
+              excluding: required,
+              child: AbsorbPointer(absorbing: required, child: child),
+            ),
           ),
         ),
         if (required) const _UpdateGateScreen(),
       ],
     );
   }
+
+  /// The Android predictive-back transition claims system back swipes and
+  /// pops its route on commit, bypassing `didPopRoute`. The routes are hidden
+  /// while gated, so a plain zoom transition loses nothing.
+  static ThemeData _withoutPredictiveBack(ThemeData theme) => theme.copyWith(
+    pageTransitionsTheme: PageTransitionsTheme(
+      builders: {
+        ...theme.pageTransitionsTheme.builders,
+        TargetPlatform.android: const ZoomPageTransitionsBuilder(),
+      },
+    ),
+  );
 }
 
 class _UpdateGateScreen extends ConsumerWidget {
