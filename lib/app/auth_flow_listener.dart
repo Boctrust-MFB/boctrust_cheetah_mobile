@@ -8,10 +8,12 @@ import '../helper/fcm_service.dart';
 import '../helper/local_notification_service.dart';
 import '../helper/notification_actions.dart';
 import '../helper/notification_navigator.dart';
+import '../module/account/provider/account_preferences_provider.dart';
 import '../module/core_banking/provider/biometric_transfer_provider.dart';
 import '../module/onboarding/provider/auth_session_provider.dart';
 import '../module/onboarding/provider/biometric_login_provider.dart';
 import '../module/onboarding/provider/fcm_token_provider.dart';
+import '../module/savings/service/savings_reminder_service.dart';
 import 'api_logger.dart';
 import 'app_router.dart';
 import 'auth_navigation_provider.dart';
@@ -67,6 +69,7 @@ class _AuthFlowListenerState extends ConsumerState<AuthFlowListener>
     if (state == AppLifecycleState.resumed &&
         ref.read(authSessionProvider) != null) {
       ref.read(fcmTokenProvider.notifier).registerAfterBootstrap();
+      unawaited(ref.read(savingsReminderServiceProvider).sync());
     }
   }
 
@@ -101,6 +104,10 @@ class _AuthFlowListenerState extends ConsumerState<AuthFlowListener>
     ref.listen(localNotificationTapProvider, (_, next) {
       next.whenData(_dispatchNotification);
     });
+    ref.listen(
+      notificationPreferencesProvider.select((p) => p.savingsReminders),
+      (_, _) => unawaited(ref.read(savingsReminderServiceProvider).sync()),
+    );
     ref.listen(authSessionProvider, (previous, next) {
       if (previous != null && next == null) {
         _authenticatedDestinationReady = false;
@@ -168,6 +175,7 @@ class _AuthFlowListenerState extends ConsumerState<AuthFlowListener>
   void _markAuthenticatedDestinationReady() {
     if (ref.read(authSessionProvider) == null) return;
     _authenticatedDestinationReady = true;
+    unawaited(ref.read(savingsReminderServiceProvider).sync());
     final payload = _pendingNotification;
     if (payload == null) return;
     _pendingNotification = null;

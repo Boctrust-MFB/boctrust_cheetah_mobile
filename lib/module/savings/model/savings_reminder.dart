@@ -184,3 +184,6 @@ class SavingsReminderTap {
     String planId,
   ) => '${product.name}|$ownerTag|$planId';
 }
+
+/// The notification action carried by every savings reminder.
+const savingsReminderAction = 'savings.reminder';
