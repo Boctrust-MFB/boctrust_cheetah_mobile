@@ -46,6 +46,7 @@ class LocalNotificationService {
   final _taps = StreamController<Map<String, String>>.broadcast();
   Future<bool>? _initialized;
   bool _launchConsumed = false;
+  bool _zonesLoaded = false;
 
   /// Normalized `route`/`id` payloads of notifications tapped while the app
   /// is running.
@@ -91,8 +92,6 @@ class LocalNotificationService {
           importance: Importance.defaultImportance,
         ),
       );
-      tzdata.initializeTimeZones();
-      await _setLocalTimeZone();
       return true;
     } catch (error) {
       _log('Local notifications unavailable: ${error.runtimeType}');
@@ -101,8 +100,12 @@ class LocalNotificationService {
   }
 
   /// Points `tz.local` at the device's current zone, or Africa/Lagos when it
-  /// cannot be read. Assumes the time-zone database is initialized.
+  /// cannot be read. Loads the time-zone database on first use.
   Future<void> _setLocalTimeZone() async {
+    if (!_zonesLoaded) {
+      tzdata.initializeTimeZones();
+      _zonesLoaded = true;
+    }
     var name = _fallbackTimeZone;
     try {
       name = (await FlutterTimezone.getLocalTimezone()).identifier;
@@ -139,6 +142,7 @@ class LocalNotificationService {
     if (!dueAt.isAfter(DateTime.now())) return false;
     if (!await initialize() || !await notificationsEnabled()) return false;
     try {
+      if (!_zonesLoaded) await _setLocalTimeZone();
       await _plugin.zonedSchedule(
         id,
         title,
@@ -155,12 +159,12 @@ class LocalNotificationService {
     }
   }
 
-  /// Pending reminders whose payload action equals [action]. Empty when the
-  /// platform cannot be read.
-  Future<List<({int id, String? argument})>> pendingReminders(
+  /// Pending reminders whose payload action equals [action]. Null when the
+  /// platform cannot be read, so callers can tell failure from "none".
+  Future<List<({int id, String? argument})>?> pendingReminders(
     String action,
   ) async {
-    if (!await initialize()) return const [];
+    if (!await initialize()) return null;
     try {
       final pending = await _plugin.pendingNotificationRequests();
       return [
@@ -178,7 +182,7 @@ class LocalNotificationService {
       ];
     } catch (error) {
       _log('Pending reminders unavailable: ${error.runtimeType}');
-      return const [];
+      return null;
     }
   }
 

@@ -49,30 +49,34 @@ class SavingsReminderService {
   /// Cancels every pending savings reminder, whoever owns it.
   Future<void> cancelAllScheduled() => _enqueue(_cancelAllScheduled);
 
+  /// Stores the choice, then syncs in the background: the returned future
+  /// completes once the choice is written, not when the sync finishes.
   Future<void> setContributionChoice(
     String planId,
     ContributionReminderChoice choice,
-  ) => _enqueue(() async {
-    final userId = _ref.read(authSessionProvider)?.userId;
-    if (userId == null) return;
-    final storage = _ref.read(secureStorageProvider);
-    final record = await storage.readSavingsReminders(userId);
-    final choices = {...record.choices};
-    if (choice == ContributionReminderChoice.off) {
-      choices.remove(planId);
-    } else {
-      choices[planId] = choice;
-    }
-    await storage.writeSavingsReminders(
-      userId,
-      SavingsReminderRecord(
-        entries: record.entries,
-        choices: choices,
-        fundingSpent: record.fundingSpent,
-      ),
-    );
-    await _sync();
-  });
+  ) async {
+    await _enqueue(() async {
+      final userId = _ref.read(authSessionProvider)?.userId;
+      if (userId == null) return;
+      final storage = _ref.read(secureStorageProvider);
+      final record = await storage.readSavingsReminders(userId);
+      final choices = {...record.choices};
+      if (choice == ContributionReminderChoice.off) {
+        choices.remove(planId);
+      } else {
+        choices[planId] = choice;
+      }
+      await storage.writeSavingsReminders(
+        userId,
+        SavingsReminderRecord(
+          entries: record.entries,
+          choices: choices,
+          fundingSpent: record.fundingSpent,
+        ),
+      );
+    });
+    unawaited(sync());
+  }
 
   /// Opens the plan a reminder points at, with its product list beneath so
   /// Back lands there. Drops a tap that is not for the signed-in user.
@@ -128,6 +132,10 @@ class SavingsReminderService {
     final notifications = _ref.read(localNotificationServiceProvider);
     if (notifications == null) return;
     final pending = await notifications.pendingReminders(savingsReminderAction);
+    if (pending == null) {
+      apiLogger.w('Savings reminders not cancelled: pending list unavailable');
+      return;
+    }
     for (final request in pending) {
       await notifications.cancelReminder(request.id);
     }
@@ -142,6 +150,10 @@ class SavingsReminderService {
     final owner = savingsOwnerTag(userId);
 
     final pending = await notifications.pendingReminders(savingsReminderAction);
+    if (pending == null) {
+      apiLogger.w('Savings reminder sync skipped: pending list unavailable');
+      return;
+    }
     final mine = <int>{};
     for (final request in pending) {
       if (_ownerOf(request.argument) == owner) {
@@ -153,6 +165,16 @@ class SavingsReminderService {
 
     final storage = _ref.read(secureStorageProvider);
     final record = await storage.readSavingsReminders(userId);
+    final now = DateTime.now();
+    final spent = {...record.fundingSpent};
+    // A funding reminder that is due and no longer pending has fired.
+    for (final entry in record.entries) {
+      if (entry.kind == SavingsReminderKind.funding &&
+          !entry.dueAt.isAfter(now) &&
+          !mine.contains(entry.osId)) {
+        spent.add(entry.planId);
+      }
+    }
     if (!_ref.read(notificationPreferencesProvider).savingsReminders) {
       for (final id in mine) {
         await notifications.cancelReminder(id);
@@ -162,7 +184,7 @@ class SavingsReminderService {
         SavingsReminderRecord(
           entries: const [],
           choices: record.choices,
-          fundingSpent: record.fundingSpent,
+          fundingSpent: spent,
         ),
       );
       return;
@@ -182,19 +204,11 @@ class SavingsReminderService {
     // The owner or session may have changed while Core was answering.
     if (_ref.read(authSessionProvider)?.userId != userId) return;
 
-    final now = DateTime.now();
     final planIds = {for (final plan in plans) plan.id};
     final awaitingFunding = {
       for (final plan in plans)
         if (plan.status == SavingsPlanStatus.pendingFunding) plan.id,
     };
-    final spent = {...record.fundingSpent};
-    for (final entry in record.entries) {
-      if (entry.kind == SavingsReminderKind.funding &&
-          !entry.dueAt.isAfter(now)) {
-        spent.add(entry.planId);
-      }
-    }
     spent.removeWhere((id) => !awaitingFunding.contains(id));
     final choices = {
       for (final c in record.choices.entries)
@@ -215,10 +229,14 @@ class SavingsReminderService {
     for (final id in mine) {
       if (!desired.containsKey(id)) await notifications.cancelReminder(id);
     }
+    final recordDue = {for (final e in record.entries) e.osId: e.dueAt};
     final entries = <SavingsReminderEntry>[];
     for (final item in desired.entries) {
       final reminder = item.value;
-      var scheduled = mine.contains(item.key);
+      // The id is keyed by local due day, so a pending request with this id
+      // may still carry another time; only an unchanged due time is kept.
+      var scheduled =
+          mine.contains(item.key) && recordDue[item.key] == reminder.dueAt;
       if (!scheduled) {
         scheduled = await notifications.scheduleReminder(
           id: item.key,
@@ -258,7 +276,7 @@ class SavingsReminderService {
   /// The owner tag in a savings tap argument, `<product>|<owner>|<planId>`.
   static String? _ownerOf(String? argument) {
     final parts = argument?.split('|');
-    if (parts == null || parts.length < 3) return null;
+    if (parts == null || parts.length != 3) return null;
     return parts[1];
   }
 }

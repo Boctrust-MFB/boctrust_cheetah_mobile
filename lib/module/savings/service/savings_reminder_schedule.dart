@@ -53,9 +53,7 @@ List<SavingsReminder> plannedSavingsReminders(
 
     if (plan.status == SavingsPlanStatus.pendingFunding) {
       final created = plan.createdAt;
-      if (created != null &&
-          !fundingSpent.contains(plan.id) &&
-          nowUtc.isBefore(created.toUtc().add(_fundingWindow))) {
+      if (created != null && !fundingSpent.contains(plan.id)) {
         final earliest = _later(
           created.toUtc().add(const Duration(hours: 24)),
           nowUtc,
@@ -77,18 +75,20 @@ List<SavingsReminder> plannedSavingsReminders(
             9,
           );
         }
-        important.add(
-          SavingsReminder(
-            planId: plan.id,
-            product: plan.type,
-            kind: SavingsReminderKind.funding,
-            dueAt: due.toUtc(),
-            title: 'Fund your new plan',
-            body:
-                'Your new ${_productName(plan.type)} plan is waiting for its '
-                'first deposit. Tap to add money.',
-          ),
-        );
+        if (due.toUtc().isBefore(created.toUtc().add(_fundingWindow))) {
+          important.add(
+            SavingsReminder(
+              planId: plan.id,
+              product: plan.type,
+              kind: SavingsReminderKind.funding,
+              dueAt: due.toUtc(),
+              title: 'Fund your new plan',
+              body:
+                  'Your new ${_productName(plan.type)} plan is waiting for '
+                  'its first deposit. Tap to add money.',
+            ),
+          );
+        }
       }
     }
 

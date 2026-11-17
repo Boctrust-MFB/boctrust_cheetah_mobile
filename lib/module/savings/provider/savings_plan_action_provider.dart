@@ -194,7 +194,9 @@ class SavingsPlanActionNotifier extends Notifier<SavingsPlanActionState> {
       );
     } finally {
       // Sync only trusts Core's lists, so it runs whatever the outcome.
-      unawaited(ref.read(savingsReminderServiceProvider).sync());
+      if (ref.mounted) {
+        unawaited(ref.read(savingsReminderServiceProvider).sync());
+      }
       link.close();
     }
   }
