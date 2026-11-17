@@ -41,14 +41,18 @@ void main() {
       expect(darwin.requestSoundPermission, isFalse);
     });
 
-    test('creates the high-importance channel once', () async {
+    test('creates the general and reminders channels once', () async {
       await service.initialize();
       await service.initialize();
       expect(plugin.initializations, hasLength(1));
-      final channel = plugin.android.channels.single;
-      expect(channel.id, 'boctrust_general');
-      expect(channel.name, 'Cheetah notifications');
-      expect(channel.importance, Importance.high);
+      final channels = plugin.android.channels;
+      expect(channels, hasLength(2));
+      expect(channels[0].id, 'boctrust_general');
+      expect(channels[0].name, 'Cheetah notifications');
+      expect(channels[0].importance, Importance.high);
+      expect(channels[1].id, 'boctrust_reminders');
+      expect(channels[1].name, 'Reminders');
+      expect(channels[1].importance, Importance.defaultImportance);
     });
 
     test('a failure returns false without throwing, and can retry', () async {

@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:timezone/data/latest_all.dart' as tzdata;
+import 'package:timezone/timezone.dart' as tz;
 
 import '../app/api_logger.dart';
 import 'notification_payload.dart';
@@ -34,6 +37,9 @@ class LocalNotificationService {
   static const channelId = 'boctrust_general';
   // The id stays so existing notification settings carry over.
   static const channelName = 'Cheetah notifications';
+  static const remindersChannelId = 'boctrust_reminders';
+  static const remindersChannelName = 'Reminders';
+  static const _fallbackTimeZone = 'Africa/Lagos';
 
   final FlutterLocalNotificationsPlugin _plugin;
   final void Function(String message) _log;
@@ -67,21 +73,121 @@ class LocalNotificationService {
         ),
         onDidReceiveNotificationResponse: _onResponse,
       );
-      await _plugin
+      final android = _plugin
           .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin
-          >()
-          ?.createNotificationChannel(
-            const AndroidNotificationChannel(
-              channelId,
-              channelName,
-              importance: Importance.high,
-            ),
-          );
+          >();
+      await android?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          channelId,
+          channelName,
+          importance: Importance.high,
+        ),
+      );
+      await android?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          remindersChannelId,
+          remindersChannelName,
+          importance: Importance.defaultImportance,
+        ),
+      );
+      tzdata.initializeTimeZones();
+      await _setLocalTimeZone();
       return true;
     } catch (error) {
       _log('Local notifications unavailable: ${error.runtimeType}');
       return false;
+    }
+  }
+
+  /// Points `tz.local` at the device's current zone, or Africa/Lagos when it
+  /// cannot be read. Assumes the time-zone database is initialized.
+  Future<void> _setLocalTimeZone() async {
+    var name = _fallbackTimeZone;
+    try {
+      name = (await FlutterTimezone.getLocalTimezone()).identifier;
+      tz.setLocalLocation(tz.getLocation(name));
+    } catch (error) {
+      _log('Device time zone unavailable: ${error.runtimeType}');
+      tz.setLocalLocation(tz.getLocation(_fallbackTimeZone));
+    }
+  }
+
+  /// Re-reads the device time zone so reminders are scheduled in local time.
+  /// Safe to call repeatedly; never throws.
+  Future<void> refreshLocalTimeZone() async {
+    try {
+      if (!await initialize()) return;
+      await _setLocalTimeZone();
+    } catch (error) {
+      _log('Time zone refresh failed: ${error.runtimeType}');
+    }
+  }
+
+  /// Schedules a one-off reminder at [dueAt] on the reminders channel. The tap
+  /// payload carries [action] and [argument]. Returns false, without
+  /// throwing, when [dueAt] is not in the future, notifications are disabled
+  /// or scheduling fails.
+  Future<bool> scheduleReminder({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime dueAt,
+    required String action,
+    required String argument,
+  }) async {
+    if (!dueAt.isAfter(DateTime.now())) return false;
+    if (!await initialize() || !await notificationsEnabled()) return false;
+    try {
+      await _plugin.zonedSchedule(
+        id,
+        title,
+        body,
+        tz.TZDateTime.from(dueAt, tz.local),
+        _reminderDetails,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: NotificationPayload.localPayload(action: action, id: argument),
+      );
+      return true;
+    } catch (error) {
+      _log('Reminder $id not scheduled: ${error.runtimeType}');
+      return false;
+    }
+  }
+
+  /// Pending reminders whose payload action equals [action]. Empty when the
+  /// platform cannot be read.
+  Future<List<({int id, String? argument})>> pendingReminders(
+    String action,
+  ) async {
+    if (!await initialize()) return const [];
+    try {
+      final pending = await _plugin.pendingNotificationRequests();
+      return [
+        for (final request in pending)
+          if (NotificationPayload.decodeLocalPayload(
+                request.payload,
+              )?['action'] ==
+              action)
+            (
+              id: request.id,
+              argument: NotificationPayload.decodeLocalPayload(
+                request.payload,
+              )?['id'],
+            ),
+      ];
+    } catch (error) {
+      _log('Pending reminders unavailable: ${error.runtimeType}');
+      return const [];
+    }
+  }
+
+  Future<void> cancelReminder(int id) async {
+    if (!await initialize()) return;
+    try {
+      await _plugin.cancel(id);
+    } catch (error) {
+      _log('Reminder $id not cancelled: ${error.runtimeType}');
     }
   }
 
@@ -177,6 +283,22 @@ class LocalNotificationService {
       channelName,
       importance: Importance.high,
       priority: Priority.high,
+      icon: androidSmallIcon,
+    ),
+    iOS: DarwinNotificationDetails(
+      presentAlert: true,
+      presentBanner: true,
+      presentList: true,
+      presentSound: true,
+    ),
+  );
+
+  static const _reminderDetails = NotificationDetails(
+    android: AndroidNotificationDetails(
+      remindersChannelId,
+      remindersChannelName,
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
       icon: androidSmallIcon,
     ),
     iOS: DarwinNotificationDetails(
