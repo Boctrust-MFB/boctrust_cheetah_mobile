@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app/update/app_update_controller.dart';
+
 typedef NotificationActionRun = Future<void> Function(String? argument);
 
 /// What a local-notification tap runs for a given `action`.
@@ -18,4 +20,12 @@ class NotificationActionHandler {
 /// The single registration point for notification actions, keyed by the
 /// payload `action`, like the route table.
 final notificationActionHandlersProvider =
-    Provider<Map<String, NotificationActionHandler>>((ref) => const {});
+    Provider<Map<String, NotificationActionHandler>>(
+      (ref) => {
+        AppUpdateController.notificationAction: NotificationActionHandler(
+          requiresSession: false,
+          run: (_) =>
+              ref.read(appUpdateControllerProvider.notifier).openStore(),
+        ),
+      },
+    );

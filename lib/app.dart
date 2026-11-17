@@ -11,6 +11,7 @@ import 'app/navigators.dart';
 import 'app/preferences.dart';
 import 'app/theme.dart';
 import 'app/theme_controller.dart';
+import 'app/update/update_gate.dart';
 import 'helper/fcm_service.dart';
 import 'helper/local_notification_service.dart';
 import 'module/account/provider/account_preferences_provider.dart';
@@ -44,7 +45,9 @@ class CheetahApp extends StatelessWidget {
         ...overrides,
       ],
       child: AuthFlowListener(
-        child: _CheetahMaterialApp(initialRoute: initialRoute),
+        child: AppUpdateScope(
+          child: _CheetahMaterialApp(initialRoute: initialRoute),
+        ),
       ),
     );
   }
@@ -107,8 +110,11 @@ class _CheetahMaterialApp extends ConsumerWidget {
             boldText: media.boldText || accessibility.boldText,
           ),
           // Keep debug sessions open during development. Profile and release
-          // builds retain the normal inactivity warning and sign-out.
-          child: kDebugMode ? child! : InactivityGuard(child: child!),
+          // builds retain the normal inactivity warning and sign-out. A
+          // required update covers every route; the guard keeps running.
+          child: UpdateGate(
+            child: kDebugMode ? child! : InactivityGuard(child: child!),
+          ),
         );
       },
     );
