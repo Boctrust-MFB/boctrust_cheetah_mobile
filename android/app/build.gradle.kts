@@ -53,4 +53,6 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
     // Bundled Latin model for Scan to Pay: works offline, no Play Services download.
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    // Read-only Play availability query for store-gated updates; no update flow is started.
+    implementation("com.google.android.play:app-update:2.1.0")
 }
