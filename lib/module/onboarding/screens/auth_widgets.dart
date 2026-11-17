@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iconsax_plus/iconsax_plus.dart';
 
+import '../../../app/app_version_label.dart';
 import '../../../app/app_router.dart';
 import '../../../app/auth_navigation_provider.dart';
 import '../../../app/preferences.dart';
@@ -123,6 +124,7 @@ class AuthPage extends StatelessWidget {
     this.isLoading = false,
     this.onBack,
     this.footer,
+    this.showVersion = false,
     super.key,
   });
 
@@ -134,6 +136,7 @@ class AuthPage extends StatelessWidget {
   final bool isLoading;
   final VoidCallback? onBack;
   final Widget? footer;
+  final bool showVersion;
 
   @override
   Widget build(BuildContext context) {
@@ -176,6 +179,10 @@ class AuthPage extends StatelessWidget {
             onPressed: onButtonPressed,
           ),
           if (footer != null) ...[const SizedBox(height: 10), footer],
+          if (showVersion) ...[
+            const SizedBox(height: 8),
+            const AppVersionLabel(),
+          ],
         ],
       ),
     );

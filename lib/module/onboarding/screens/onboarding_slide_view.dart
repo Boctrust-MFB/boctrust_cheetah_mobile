@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/app_version_label.dart';
 import '../../../app/theme.dart';
 import '../../app_flow/app_ui.dart';
 
@@ -156,6 +157,8 @@ class _OnboardingSlideViewState extends State<OnboardingSlideView> {
                                 onPressed: widget.onLogin,
                                 child: const Text('I already have an account'),
                               ),
+                              const SizedBox(height: 4),
+                              const AppVersionLabel(),
                             ],
                           ),
                         ),

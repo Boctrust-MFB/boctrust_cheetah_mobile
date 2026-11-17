@@ -111,19 +111,59 @@ class LocalNotificationService {
     }
   }
 
+  /// Whether the OS currently lets the app show notifications. Never asks
+  /// for permission; null or failing platform checks count as disabled.
+  Future<bool> notificationsEnabled() async {
+    try {
+      final android = _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      if (android != null) {
+        return await android.areNotificationsEnabled() ?? false;
+      }
+      final ios = _plugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >();
+      if (ios != null) {
+        return (await ios.checkPermissions())?.isEnabled ?? false;
+      }
+      return false;
+    } catch (error) {
+      _log('Notification permission check failed: ${error.runtimeType}');
+      return false;
+    }
+  }
+
   /// Shows a notification the app itself raised, such as a saved file, on
-  /// the app's channel with no payload. Failures are logged without content
-  /// and never thrown; returns whether it was handed to the platform.
+  /// the app's channel. With [key] the id is stable, so a later post with the
+  /// same key replaces the earlier one; without it the id is time-based.
+  /// [action] and [argument] are carried in the tap payload. Failures are
+  /// logged without content and never thrown; returns true only when
+  /// notifications are enabled and the notification was handed to the
+  /// platform.
   Future<bool> showAppNotification({
     required String title,
     required String body,
+    String? key,
+    String? action,
+    String? argument,
   }) async {
-    if (!await initialize()) return false;
-    final id = NotificationPayload.stableId(
-      '$title:${DateTime.now().microsecondsSinceEpoch}',
-    );
+    if (!await initialize() || !await notificationsEnabled()) return false;
+    final id = key != null
+        ? NotificationPayload.stableId(key)
+        : NotificationPayload.stableId(
+            '$title:${DateTime.now().microsecondsSinceEpoch}',
+          );
     try {
-      await _plugin.show(id, title, body, _details);
+      await _plugin.show(
+        id,
+        title,
+        body,
+        _details,
+        payload: NotificationPayload.localPayload(id: argument, action: action),
+      );
       return true;
     } catch (error) {
       _log('Local notification $id not shown: ${error.runtimeType}');

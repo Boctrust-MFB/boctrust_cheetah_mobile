@@ -51,6 +51,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         // flashes before the remembered-account layout.
         if (biometric.phase == BiometricLoginPhase.hydrating) {
           return AuthPage(
+            showVersion: true,
             title: 'Welcome back',
             subtitle: 'Checking this device…',
             content: const Padding(
@@ -67,6 +68,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           return _remembered(state, biometric, remembered);
         }
         return AuthPage(
+          showVersion: true,
           title: 'Welcome back',
           subtitle: 'Log in with your registered email or phone and password.',
           content: Column(
@@ -146,6 +148,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _ => (IconsaxPlusLinear.finger_scan, 'fingerprint'),
     };
     return AuthPage(
+      showVersion: true,
       title: '${timeBasedGreeting(DateTime.now())}, ${remembered.firstName}',
       subtitle: 'Log in with your password or $biometricLabel.',
       content: Column(

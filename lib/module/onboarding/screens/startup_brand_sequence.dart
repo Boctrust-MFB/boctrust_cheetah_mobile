@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/app_version_label.dart';
 import '../../../app/theme.dart';
 import '../../app_flow/app_ui.dart';
 
@@ -120,8 +121,15 @@ class _StartupBrandSequenceState extends State<StartupBrandSequence>
                 child: Align(
                   alignment: Alignment.bottomCenter,
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(24, 0, 24, 24),
-                    child: RegulatoryBadge.splash(),
+                    padding: EdgeInsets.fromLTRB(24, 0, 24, 16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        RegulatoryBadge.splash(),
+                        SizedBox(height: 8),
+                        AppVersionLabel(onSplash: true),
+                      ],
+                    ),
                   ),
                 ),
               ),

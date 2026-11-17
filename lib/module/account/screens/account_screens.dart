@@ -8,6 +8,7 @@ import 'package:intl/intl.dart' show DateFormat;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/app_router.dart';
+import '../../../app/app_version_label.dart';
 import '../../../app/auth_navigation_provider.dart';
 import '../../../app/boc_icons.dart';
 import '../../../app/feature_capability.dart';
@@ -333,7 +334,8 @@ extension _AccountScreens on _AccountPageState {
                 SettingsTile(
                   icon: IconsaxPlusLinear.shield_tick,
                   title: 'Account tier',
-                  subtitle: 'Tier ${profile?.tier ?? '—'} · Verification details',
+                  subtitle:
+                      'Tier ${profile?.tier ?? '—'} · Verification details',
                   onTap: () =>
                       Navigator.of(context).pushNamed(AppRoutes.tierOverview),
                 ),
@@ -436,6 +438,8 @@ extension _AccountScreens on _AccountPageState {
               ),
               child: RegulatoryBadge(),
             ),
+            const SizedBox(height: BocSpace.sm),
+            const AppVersionLabel(),
           ],
         ),
       ),

@@ -3,7 +3,10 @@ package com.boctrust.boctrust_savings_loan
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.Build
 import com.google.android.gms.tasks.Tasks
+import com.google.android.play.core.appupdate.AppUpdateManagerFactory
+import com.google.android.play.core.install.model.UpdateAvailability
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
@@ -54,6 +57,54 @@ class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "boctrust/app_update")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "availableRelease" -> availableRelease(result)
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    // Only Play-installed builds are checked. Never starts an update flow.
+    private fun availableRelease(result: MethodChannel.Result) {
+        val installer = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                packageManager.getInstallSourceInfo(packageName).installingPackageName
+            } else {
+                @Suppress("DEPRECATION")
+                packageManager.getInstallerPackageName(packageName)
+            }
+        } catch (e: Exception) {
+            null
+        }
+        if (installer != "com.android.vending") {
+            result.success(mapOf("status" to "unsupported"))
+            return
+        }
+        try {
+            AppUpdateManagerFactory.create(applicationContext).appUpdateInfo
+                .addOnSuccessListener { info ->
+                    when (info.updateAvailability()) {
+                        UpdateAvailability.UPDATE_AVAILABLE -> result.success(
+                            mapOf(
+                                "status" to "available",
+                                "versionCode" to info.availableVersionCode(),
+                            ),
+                        )
+                        UpdateAvailability.UPDATE_NOT_AVAILABLE ->
+                            result.success(mapOf("status" to "not_available"))
+                        else -> result.success(mapOf("status" to "error"))
+                    }
+                }
+                .addOnFailureListener { e ->
+                    // Only the exception type; the message is not needed.
+                    android.util.Log.w("AppUpdate", "Play query failed: ${e.javaClass.simpleName}")
+                    result.success(mapOf("status" to "error"))
+                }
+        } catch (e: Exception) {
+            result.success(mapOf("status" to "error"))
+        }
     }
 
     // Runs [work] on the scan executor and posts its lines, or a failure, to Dart.
