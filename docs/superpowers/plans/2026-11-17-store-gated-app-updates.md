@@ -46,21 +46,29 @@ One JSON string parameter, `app_update_policy_v1`. In-app default: `{"android":{
 
 ```json
 {
-  "android": { "enabled": true, "targetBuild": 120, "minSupportedBuild": 110 },
-  "ios": { "enabled": true, "targetVersion": "1.2.0", "minSupportedVersion": "1.1.0", "appStoreId": "1234567890", "country": "ng" }
+  "android": { "enabled": true, "targetVersion": "1.1.0", "targetBuild": 12, "force": false },
+  "ios": { "enabled": true, "targetVersion": "1.1.0", "appStoreId": "1234567890", "country": "ng", "force": false }
 }
 ```
 
-- `minSupported*` is the first installed release allowed to keep using the app. Installed below it means **required**. Installed from it up to (but excluding) the target means **optional**.
+- Versions follow `pubspec.yaml`'s `x.y.z+build` (currently `1.0.0+1`). The middle number marks a **major** update (`1.x.0`). The last number marks a **minor** update (`1.0.x`). The first number counts as major too.
+- Severity comes from the versions; there is no configured minimum:
+  - **Required:** the target's first or middle number is higher than the installed version's.
+  - **Optional:** anything else that is still an update, such as a last-number bump or an Android rebuild of the same version with a higher build.
+  - **`force: true`** makes an optional update required. It defaults to false.
+- **Already up to date:**
+  - Android: the installed build is at least `targetBuild`.
+  - iOS: the installed version is at least `targetVersion`.
+- Android carries both identifiers: `targetVersion` decides severity, and `targetBuild` is what Play confirms.
 - The platform object is valid only when all of these hold:
-  - Android codes are positive ints.
-  - iOS versions are 1–4 dot-separated non-negative ints.
-  - `minimum <= target`.
-  - `appStoreId` is all digits.
-  - `country` is two lowercase letters.
+  - `targetVersion` is exactly three dot-separated non-negative ints.
+  - `targetBuild` is a positive int (Android).
+  - `force` is a bool when present.
+  - `appStoreId` is all digits (iOS).
+  - `country` is two lowercase letters (iOS).
 - Anything else, including a missing platform object, means disabled.
 - No remote-supplied URLs. The Android URL is built from the installed package name. The iOS URL is the matching lookup result's `trackViewUrl`, accepted only for `https` on host `apps.apple.com`.
-- Releases must bump `pubspec.yaml` `version` (currently `1.0.0+1`). iOS compares the marketing version, so every App Store release needs a new `x.y.z`.
+- Releases must bump `pubspec.yaml` `version`. Every store release raises the build number. iOS compares the marketing version only, so every App Store release also needs a new `x.y.z`.
 
 ## Review Focus
 
@@ -116,22 +124,23 @@ One JSON string parameter, `app_update_policy_v1`. In-app default: `{"android":{
 **Interfaces:**
 - Produces (`update_policy.dart`):
   - `enum UpdatePlatform { android, ios }`.
+  - `class AppVersion implements Comparable<AppVersion>` with `major`, `middle`, `minor` ints.
+    - `AppVersion.tryParse(String) → AppVersion?` accepts exactly three dot-separated non-negative ints.
+    - It compares numerically, component by component, and never compares strings. So `1.10.0 > 1.9.0`.
+    - `toString()` gives `x.y.z`.
   - `UpdatePolicy.fromJson(Object? json, UpdatePlatform platform) → UpdatePolicy?`. Returns null for disabled or invalid input. Fields:
-    - `target`, `minimum`: a `ReleaseId`.
-    - `appStoreId`, `country`: iOS only.
-  - `sealed class ReleaseId implements Comparable<ReleaseId>` with two variants:
-    - `BuildCode(int)` for Android.
-    - `MarketingVersion(List<int>)` for iOS. It parses dotted ints, compares component-wise with missing components treated as 0, and never compares strings. So `1.10.0 > 1.9.0` and `1.2 == 1.2.0`.
-    - `toString()` gives the canonical form used in ledger keys.
-  - `class InstalledRelease { UpdatePlatform platform; ReleaseId release; String packageName; }`
-  - `class StoreRelease { ReleaseId release; Uri storeUrl; }`
+    - `targetVersion` (`AppVersion`) and `force` (`bool`, default false).
+    - `targetBuild` (`int?`): Android only.
+    - `appStoreId`, `country` (`String?`): iOS only.
+  - `class InstalledRelease { UpdatePlatform platform; AppVersion version; int build; String packageName; }`
+  - `class StoreRelease { AppVersion? version; int? build; Uri storeUrl; }`. Android sets `build`; iOS sets `version`.
   - `sealed class StoreCheck` with three variants: `StoreAvailable(StoreRelease)`, `StoreNotAvailable()` (conclusive), and `StoreUnknown()` (error, timeout, unsupported install).
-  - `enum UpdateKind { none, optional, required }` and `class UpdateDecision { UpdateKind kind; ReleaseId? target; Uri? storeUrl; }`.
+  - `enum UpdateKind { none, optional, required }` and `class UpdateDecision { UpdateKind kind; AppVersion? target; Uri? storeUrl; }`.
   - `UpdateDecision evaluateUpdate({required UpdatePolicy policy, required InstalledRelease installed, required StoreCheck store})` returns the first match:
-    1. `installed >= policy.target` → none.
+    1. Already up to date → none. On Android that is `installed.build >= policy.targetBuild`; on iOS, `installed.version >= policy.targetVersion`.
     2. `store` is not `StoreAvailable` → none.
-    3. `store.release < policy.target` → none.
-    4. `installed < policy.minimum` → required.
+    3. The store release is below the target → none. On Android that is `store.build < policy.targetBuild`; on iOS, `store.version < policy.targetVersion`.
+    4. `policy.force`, or the target's `major` or `middle` is higher than the installed version's (compare `(major, middle)` as a pair) → required.
     5. Otherwise → optional.
     - `target` and `storeUrl` are set only for optional/required.
 - Produces (`update_policy_service.dart`):
@@ -150,10 +159,7 @@ One JSON string parameter, `app_update_policy_v1`. In-app default: `{"android":{
     - `setConfigSettings(RemoteConfigSettings(fetchTimeout: Duration(seconds: 10), minimumFetchInterval: Duration(hours: 1)))`.
   - **`loadPolicy`:** calls `fetchAndActivate()`. On any exception it falls back to the already-active values (cached or default), then decodes the parameter and calls `UpdatePolicy.fromJson`.
   - **`updates`:** listens to `onConfigUpdated`, calls `activate()`, then emits. This is how rollback reaches open apps without waiting out the fetch interval.
-  - **`installedRelease`:** reads `PackageInfo.fromPlatform()`.
-    - Android: `BuildCode(int.parse(buildNumber))`.
-    - iOS: `MarketingVersion` of `version`.
-    - Parse failure: null.
+  - **`installedRelease`:** reads `PackageInfo.fromPlatform()`. `version` comes from `AppVersion.tryParse(info.version)` and `build` from `int.tryParse(info.buildNumber)`. If either fails to parse, it returns null.
 - [ ] **Step 4:** Run `flutter analyze`. Expected: no issues.
 - [ ] **Step 5:** Commit `feat(update): add update policy and remote config source`.
 
@@ -165,7 +171,7 @@ One JSON string parameter, `app_update_policy_v1`. In-app default: `{"android":{
 - Modify: `android/app/src/main/kotlin/com/boctrust/boctrust_savings_loan/MainActivity.kt` (second channel next to `boctrust/scan_text`)
 
 **Interfaces:**
-- Consumes: `UpdatePolicy`, `InstalledRelease`, `StoreCheck`, `StoreRelease`, `BuildCode`, `MarketingVersion` (Task 2).
+- Consumes: `UpdatePolicy`, `InstalledRelease`, `StoreCheck`, `StoreRelease`, `AppVersion` (Task 2).
 - Produces: `updateStoreServiceProvider` → `UpdateStoreService` with `Future<StoreCheck> check(UpdatePolicy, InstalledRelease)`, which never throws.
 - Android channel `boctrust/app_update`, method `availableRelease`, replies with a map:
   - `{"status": "available", "versionCode": <int>}`
@@ -182,7 +188,7 @@ One JSON string parameter, `app_update_policy_v1`. In-app default: `{"android":{
     - Any other availability, or failure → `error`, with only the exception class name.
   - Never start an update flow.
 - [ ] **Step 3:** Implement `check` for Android.
-  - `available` → `StoreAvailable(StoreRelease(BuildCode(code), Uri.parse('https://play.google.com/store/apps/details?id=${installed.packageName}')))`.
+  - `available` → `StoreAvailable(StoreRelease(build: code, storeUrl: Uri.parse('https://play.google.com/store/apps/details?id=${installed.packageName}')))`.
   - `not_available` → `StoreNotAvailable`.
   - Everything else, including `PlatformException` → `StoreUnknown`.
 - [ ] **Step 4:** Implement `check` for iOS. Use a dedicated `Dio` with no app interceptors and 5 s connect/receive timeouts. GET `https://itunes.apple.com/lookup` with `id=<appStoreId>` and `country=<country>`.
@@ -190,7 +196,7 @@ One JSON string parameter, `app_update_policy_v1`. In-app default: `{"android":{
     - `resultCount == 1`.
     - `trackId` equals `appStoreId`.
     - `bundleId` equals `installed.packageName`.
-    - `version` parses as a `MarketingVersion`.
+    - `version` parses with `AppVersion.tryParse`.
     - `trackViewUrl` is https on `apps.apple.com`.
   - `resultCount == 0` → `StoreNotAvailable`.
   - Any other mismatch or error → `StoreUnknown`.
@@ -250,10 +256,11 @@ One JSON string parameter, `app_update_policy_v1`. In-app default: `{"android":{
   - The inactivity guard keeps running under the gate. A sign-out underneath it is harmless.
 - [ ] **Step 5:** Write `docs/app-update-release-runbook.md`. It must cover all of the following:
   - **Parameter:** the exact JSON contract above and how to create the `app_update_policy_v1` parameter. Keep it a JSON string, with no conditions.
-  - **Publish order:** binary on the intended track or territories → verify on a real device → publish an optional policy → raise the minimum only once the required update is approved.
+  - **Version rules:** a middle-number bump (`1.x.0`) is required. A last-number bump (`1.0.x`) is optional unless `force: true`. On Android, `targetVersion`/`targetBuild` must match the released `pubspec.yaml` `version` (`x.y.z+build`).
+  - **Publish order:** binary on the intended track or territories → verify on a real device → publish the policy. Set `force: true` only once forcing a minor update is approved.
   - **Android check:** with a Play-installed build on an eligible device, confirm Play reports the target code.
   - **iOS check:** `curl 'https://itunes.apple.com/lookup?id=<id>&country=ng'` shows the target `version`. The lookup is CDN-cached and can lag a release by hours. Capture the real App Store ID before enabling iOS.
-  - **Rollback:** `enabled: false` or a lower minimum reaches open apps through real-time Remote Config. Apps not running pick it up on their next launch.
+  - **Rollback:** `enabled: false` or `force: false` reaches open apps through real-time Remote Config. Apps not running pick it up on their next launch.
   - **iOS phased release:** avoid a required gate on iOS during phased availability.
 - [ ] **Step 6:** Verify.
   - Run `flutter analyze`, `flutter test`, `flutter build apk --debug` and `flutter build ios --release --no-codesign`. Expected: no issues, all pass, both builds succeed.
@@ -268,5 +275,5 @@ One JSON string parameter, `app_update_policy_v1`. In-app default: `{"android":{
   - The installed base runs a binary containing this feature.
 - Confirm on an eligible Android device that Play reports the target build.
 - Confirm the iOS lookup returns the matching app and target version in the configured country.
-- Publish the optional policy first. Raise the minimum only once the required update is approved.
+- A middle-number release gates users as soon as its policy is published, so publish it only after the store release is confirmed. Set `force: true` on a minor release only once that is approved.
 - Keep a Remote Config rollback ready.

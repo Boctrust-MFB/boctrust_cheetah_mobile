@@ -6,8 +6,8 @@ Tell users about an installable app update. A routine update may appear as a dis
 
 ## Decisions for this plan
 
-- Firebase Remote Config controls the update policy, separately for Android and iOS. Each platform has a target release and a minimum supported installed release. An installed release below the minimum is **required**; one below the target but at or above the minimum is **optional**. The release team sets these values explicitly; semantic version names do not automatically decide severity.
-- Android compares integer Play version codes. iOS compares dotted numeric marketing versions. Invalid, missing, or inconsistent configuration disables the prompt.
+- Firebase Remote Config controls the update policy, separately for Android and iOS. Each platform names a target release. Versions follow `x.y.z+build`: a higher middle number (`1.x.0`, or a higher first number) is a major update and is **required**; a higher last number (`1.0.x`) is a minor update and is **optional**. A `force` flag in the config can make a minor update required.
+- Android policy carries both the target version (for severity) and the target build number (what Play reports and confirms). iOS compares dotted numeric marketing versions. Invalid, missing, or inconsistent configuration disables the prompt.
 - The app reads the installed version at runtime, fetches and activates Remote Config on launch and on return from the background, then verifies store availability before deciding. Checks are asynchronous and do not hold the splash screen.
 - On Android, Google Play's in-app update availability and available version code are authoritative for Play-installed builds. On iOS, Apple's lookup response for the configured App Store app ID and the country configured in the policy (not the device locale) supplies the published version and listing URL. A missing or ambiguous result cannot authorize a required gate.
 - A required update uses a full-screen, non-dismissible app-level gate above every route, including logged-out routes. It offers **Update** and **Retry**. Retry rechecks the store and installed version. Returning from the store rechecks automatically. The gate disappears after a qualifying install or Remote Config rollback; rollback reaches running apps through real-time Remote Config updates. It does not rely on an Android immediate-update flow.
@@ -22,13 +22,13 @@ This design covers Android and iOS. It adds no push campaign, background polling
 ## Approaches considered
 
 1. Remote Config alone: simplest, but can force a user before store rollout reaches them. Rejected.
-2. Store version alone: proves availability, but cannot express a release team's optional versus required threshold. Rejected.
+2. Store version alone: proves availability, but cannot let the release team force a minor update or switch prompting off. Rejected.
 3. Remote Config policy plus per-platform store confirmation: chosen because both severity and installability must be true before a prompt appears.
 
 ## Acceptance
 
 - Config ahead of the store produces no notification or gate.
 - Optional target available in the store produces one dismissible local notification per target; tapping it opens the verified listing.
-- Installed version below the configured minimum and target available in the store produces a persistent required gate on launch and resume; notification permission does not affect it.
+- A major target (or a forced minor target) available in the store produces a persistent required gate on launch and resume; notification permission does not affect it.
 - Store lookup failures, unsupported installation sources, malformed configuration, and Firebase failure never create a required gate.
-- Updating the installed app or lowering the Remote Config threshold removes the gate on the next check.
+- Updating the installed app or disabling the policy or clearing `force` removes the gate on the next check.
