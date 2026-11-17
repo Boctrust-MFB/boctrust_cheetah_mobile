@@ -38,7 +38,9 @@ class UpdatePolicyService {
   Future<FirebaseRemoteConfig>? _setup;
 
   Future<FirebaseRemoteConfig> _config() {
-    return _setup ??= () async {
+    final existing = _setup;
+    if (existing != null) return existing;
+    final setup = () async {
       final config = FirebaseRemoteConfig.instance;
       await config.setDefaults({_policyKey: _defaultPolicyJson});
       await config.setConfigSettings(
@@ -49,6 +51,17 @@ class UpdatePolicyService {
       );
       return config;
     }();
+    _setup = setup;
+    // A failed setup is not cached, so a later call retries it.
+    unawaited(
+      setup.then<void>(
+        (_) {},
+        onError: (Object _) {
+          if (identical(_setup, setup)) _setup = null;
+        },
+      ),
+    );
+    return setup;
   }
 
   Future<UpdatePolicy?> loadPolicy(UpdatePlatform platform) async {

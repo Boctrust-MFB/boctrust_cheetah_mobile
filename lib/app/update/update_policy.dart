@@ -155,35 +155,45 @@ class UpdateDecision {
   final Uri? storeUrl;
 }
 
+/// Whether [installed] already meets the policy target: Android compares
+/// build numbers, iOS compares versions.
+bool isUpToDate(UpdatePolicy policy, InstalledRelease installed) {
+  return policy.platform == UpdatePlatform.android
+      ? installed.build >= (policy.targetBuild ?? 0)
+      : installed.version >= policy.targetVersion;
+}
+
+/// Whether an update to the policy target would be required: not up to date,
+/// and either forced or a higher first or middle number than installed.
+bool wouldRequire(UpdatePolicy policy, InstalledRelease installed) {
+  if (isUpToDate(policy, installed)) return false;
+  final target = policy.targetVersion;
+  final current = installed.version;
+  final majorBump =
+      target.major > current.major ||
+      (target.major == current.major && target.middle > current.middle);
+  return policy.force || majorBump;
+}
+
 UpdateDecision evaluateUpdate({
   required UpdatePolicy policy,
   required InstalledRelease installed,
   required StoreCheck store,
 }) {
-  final isAndroid = policy.platform == UpdatePlatform.android;
-
-  final upToDate = isAndroid
-      ? installed.build >= (policy.targetBuild ?? 0)
-      : installed.version >= policy.targetVersion;
-  if (upToDate) return const UpdateDecision.none();
+  if (isUpToDate(policy, installed)) return const UpdateDecision.none();
 
   if (store is! StoreAvailable) return const UpdateDecision.none();
   final release = store.release;
 
-  final storeBelowTarget = isAndroid
+  final storeBelowTarget = policy.platform == UpdatePlatform.android
       ? (release.build ?? 0) < (policy.targetBuild ?? 0)
       : release.version == null || release.version! < policy.targetVersion;
   if (storeBelowTarget) return const UpdateDecision.none();
 
-  final majorBump =
-      policy.targetVersion.major > installed.version.major ||
-      (policy.targetVersion.major == installed.version.major &&
-          policy.targetVersion.middle > installed.version.middle);
-  final kind = (policy.force || majorBump)
-      ? UpdateKind.required
-      : UpdateKind.optional;
   return UpdateDecision(
-    kind: kind,
+    kind: wouldRequire(policy, installed)
+        ? UpdateKind.required
+        : UpdateKind.optional,
     target: policy.targetVersion,
     storeUrl: release.storeUrl,
   );

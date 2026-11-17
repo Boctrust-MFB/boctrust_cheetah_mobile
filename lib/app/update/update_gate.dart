@@ -68,7 +68,10 @@ class _AppUpdateScopeState extends ConsumerState<AppUpdateScope>
   @override
   Future<bool> didPopRoute() async => _isRequired(ref);
 
-  // Claim predictive back gestures too, so the navigator never sees them.
+  // Claiming the gesture stops WidgetsBinding falling back to handlePopRoute
+  // when it ends. Other observers that also claim it (the navigator) still
+  // receive the gesture callbacks, so a predictive back animation may start;
+  // the pop itself is swallowed by didPopRoute above.
   @override
   bool handleStartBackGesture(PredictiveBackEvent backEvent) =>
       _isRequired(ref);
@@ -89,13 +92,18 @@ class UpdateGate extends ConsumerWidget {
     final required =
         ref.watch(appUpdateControllerProvider.select((s) => s.decision.kind)) ==
         UpdateKind.required;
-    if (!required) return child;
+    // Same tree either way, so toggling the gate never remounts [child].
     return Stack(
+      fit: StackFit.passthrough,
       children: [
         ExcludeSemantics(
-          child: ExcludeFocus(child: AbsorbPointer(child: child)),
+          excluding: required,
+          child: ExcludeFocus(
+            excluding: required,
+            child: AbsorbPointer(absorbing: required, child: child),
+          ),
         ),
-        const _UpdateGateScreen(),
+        if (required) const _UpdateGateScreen(),
       ],
     );
   }

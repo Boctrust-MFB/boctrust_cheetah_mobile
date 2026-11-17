@@ -72,6 +72,7 @@ class AppUpdateController extends Notifier<AppUpdateState> {
   Future<void> _run(UpdatePlatform platform) async {
     state = state.copyWith(checking: true);
     UpdateDecision? decision;
+    int? targetBuild;
     try {
       final policyService = ref.read(updatePolicyServiceProvider);
       final policy = await policyService.loadPolicy(platform);
@@ -91,7 +92,13 @@ class AppUpdateController extends Notifier<AppUpdateState> {
             installed: installed,
             store: store,
           );
+        } else if (state.decision.kind == UpdateKind.required &&
+            !wouldRequire(policy, installed)) {
+          // Inconclusive store, but the policy alone no longer requires an
+          // update (already up to date, or no longer forced): drop the gate.
+          decision = const UpdateDecision.none();
         }
+        targetBuild = policy.targetBuild;
       }
     } catch (_) {
       decision = null;
@@ -104,13 +111,14 @@ class AppUpdateController extends Notifier<AppUpdateState> {
     );
 
     if (decision != null && decision.kind == UpdateKind.optional) {
-      await _notifyOptional(platform, decision);
+      await _notifyOptional(platform, decision, targetBuild);
     }
   }
 
   Future<void> _notifyOptional(
     UpdatePlatform platform,
     UpdateDecision decision,
+    int? targetBuild,
   ) async {
     final service = ref.read(localNotificationServiceProvider);
     if (service == null) return;
@@ -118,7 +126,9 @@ class AppUpdateController extends Notifier<AppUpdateState> {
       await postOnce(
         service,
         ref.read(notificationOnceLedgerProvider),
-        onceKey: 'app_update:${platform.name}:${decision.target}',
+        onceKey: platform == UpdatePlatform.android
+            ? 'app_update:android:${decision.target}+$targetBuild'
+            : 'app_update:ios:${decision.target}',
         key: 'app_update',
         title: 'Update available',
         body: 'A new version of Cheetah is ready to install.',
@@ -130,9 +140,17 @@ class AppUpdateController extends Notifier<AppUpdateState> {
   }
 
   /// Opens the store listing; checks first when no URL is known yet, as on
-  /// a cold-start notification tap.
+  /// a cold-start notification tap. Joins a check already in flight rather
+  /// than queueing another.
   Future<void> openStore() async {
-    if (state.decision.storeUrl == null) await checkForUpdate();
+    if (state.decision.storeUrl == null) {
+      final inFlight = _inFlight;
+      if (inFlight != null) {
+        await inFlight;
+      } else {
+        await checkForUpdate();
+      }
+    }
     if (!ref.mounted) return;
     final url = state.decision.storeUrl;
     if (url == null || !_isStoreUrl(url)) return;

@@ -69,10 +69,15 @@ class UpdateStoreService {
         responseType: ResponseType.plain,
       ),
     );
-    final response = await dio.get<String>(
-      'https://itunes.apple.com/lookup',
-      queryParameters: {'id': id, 'country': country},
-    );
+    final Response<String> response;
+    try {
+      response = await dio.get<String>(
+        'https://itunes.apple.com/lookup',
+        queryParameters: {'id': id, 'country': country},
+      );
+    } finally {
+      dio.close();
+    }
 
     // iTunes serves JSON as text/javascript, so decode it here.
     final body = response.data;
@@ -95,6 +100,9 @@ class UpdateStoreService {
         ? AppVersion.tryParse(rawVersion)
         : null;
     if (version == null) return const StoreUnknown();
+    // A lagging lookup edge can still serve the previous release; that is
+    // not proof the target is missing, so it must not clear an active gate.
+    if (version < policy.targetVersion) return const StoreUnknown();
     final rawUrl = item['trackViewUrl'];
     final url = rawUrl is String ? Uri.tryParse(rawUrl) : null;
     if (url == null || url.scheme != 'https' || url.host != 'apps.apple.com') {
