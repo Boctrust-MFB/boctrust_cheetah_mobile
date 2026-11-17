@@ -183,6 +183,24 @@ class SavingsReminderTap {
     String ownerTag,
     String planId,
   ) => '${product.name}|$ownerTag|$planId';
+
+  /// Null unless [argument] is `<product>|<owner>|<planId>` for a SmartSave
+  /// or Fixed plan that belongs to [currentOwnerTag].
+  static SavingsReminderTap? parse(
+    String? argument, {
+    required String? currentOwnerTag,
+  }) {
+    if (argument == null || currentOwnerTag == null) return null;
+    final parts = argument.split('|');
+    if (parts.length != 3) return null;
+    final product = _byName(SavingsProductType.values, parts[0]);
+    if (product != SavingsProductType.smartSave &&
+        product != SavingsProductType.fixed) {
+      return null;
+    }
+    if (parts[1] != currentOwnerTag || parts[2].isEmpty) return null;
+    return SavingsReminderTap(planId: parts[2], product: product!);
+  }
 }
 
 /// The notification action carried by every savings reminder.

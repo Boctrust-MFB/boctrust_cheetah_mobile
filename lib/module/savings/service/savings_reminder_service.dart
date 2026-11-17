@@ -2,7 +2,12 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:flutter/widgets.dart';
+
 import '../../../app/api_logger.dart';
+import '../../../app/app_router.dart';
+import '../../../app/navigators.dart';
+import '../../../app/route_arguments.dart';
 import '../../../helper/local_notification_service.dart';
 import '../../../helper/secure_storage.dart';
 import '../../onboarding/provider/auth_session_provider.dart';
@@ -11,6 +16,7 @@ import '../model/savings_reminder.dart';
 import 'core_savings_plan_service.dart';
 import 'savings_reminder_schedule.dart';
 import '../../account/provider/account_preferences_provider.dart';
+import '../provider/savings_plan_provider.dart';
 
 final savingsReminderServiceProvider = Provider<SavingsReminderService>(
   SavingsReminderService.new,
@@ -67,6 +73,48 @@ class SavingsReminderService {
     );
     await _sync();
   });
+
+  /// Opens the plan a reminder points at, with its product list beneath so
+  /// Back lands there. Drops a tap that is not for the signed-in user.
+  Future<void> openFromTap(String? argument) async {
+    final userId = _ref.read(authSessionProvider)?.userId;
+    final tap = SavingsReminderTap.parse(
+      argument,
+      currentOwnerTag: userId == null ? null : savingsOwnerTag(userId),
+    );
+    final navigator = rootNavigatorKey.currentState;
+    if (tap == null || navigator == null) {
+      apiLogger.w('Dropped savings reminder tap');
+      return;
+    }
+    Route<dynamic>? top;
+    navigator.popUntil((route) {
+      top = route;
+      return true;
+    });
+    final topArguments = top?.settings.arguments;
+    final topEntityId = topArguments is AppRouteArguments
+        ? topArguments.entityId
+        : null;
+    final listRoute = tap.product == SavingsProductType.smartSave
+        ? AppRoutes.targetSave
+        : AppRoutes.lockSave;
+    final topName = top?.settings.name;
+    if (topName == AppRoutes.savingsPlanDetail && topEntityId == tap.planId) {
+      _ref.invalidate(savingsPlanDetailProvider(tap.planId));
+      return;
+    }
+    if (topName != listRoute) {
+      // Resolves only on pop, so it is not awaited.
+      unawaited(pushTo<void>(listRoute));
+    }
+    unawaited(
+      pushTo<void>(
+        AppRoutes.savingsPlanDetail,
+        arguments: AppRouteArguments(entityId: tap.planId),
+      ),
+    );
+  }
 
   Future<void> _enqueue(Future<void> Function() task) {
     final run = _tail.then((_) => task());

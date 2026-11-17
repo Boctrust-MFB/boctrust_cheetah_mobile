@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/update/app_update_controller.dart';
+import '../module/savings/model/savings_reminder.dart';
+import '../module/savings/service/savings_reminder_service.dart';
 
 typedef NotificationActionRun = Future<void> Function(String? argument);
 
@@ -26,6 +28,10 @@ final notificationActionHandlersProvider =
           requiresSession: false,
           run: (_) =>
               ref.read(appUpdateControllerProvider.notifier).openStore(),
+        ),
+        savingsReminderAction: NotificationActionHandler(
+          run: (argument) =>
+              ref.read(savingsReminderServiceProvider).openFromTap(argument),
         ),
       },
     );
