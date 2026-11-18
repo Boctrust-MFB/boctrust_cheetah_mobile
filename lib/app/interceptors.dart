@@ -3,6 +3,7 @@ import 'package:logger/logger.dart';
 
 import '../module/onboarding/model/auth_session.dart';
 import 'api_endpoints.dart';
+import 'api_error_summary.dart';
 import 'api_logger.dart';
 import 'error_reporting.dart';
 
@@ -101,6 +102,7 @@ class LoggingInterceptor extends Interceptor {
         'url': _urlForLog(request),
         'statusCode': response.statusCode,
         'durationMs': _durationMilliseconds(request),
+        'requestId': ?_requestIdOf(response.data),
       });
       handler.next(response);
       return;
@@ -134,6 +136,7 @@ class LoggingInterceptor extends Interceptor {
         'statusCode': err.response?.statusCode,
         'durationMs': _durationMilliseconds(request),
         'type': err.type.name,
+        'requestId': ?_requestIdOf(err.response?.data),
       });
       handler.next(err);
       return;
@@ -172,6 +175,15 @@ class LoggingInterceptor extends Interceptor {
           : null,
     );
     handler.next(err);
+  }
+
+  /// The opaque `meta.requestId` or `meta.correlationId` of a reply, only when
+  /// it matches the safe request-ID pattern. Never any other body content.
+  static String? _requestIdOf(Object? body) {
+    final meta = body is Map ? body['meta'] : null;
+    if (meta is! Map) return null;
+    return validRequestId(meta['requestId']) ??
+        validRequestId(meta['correlationId']);
   }
 
   Set<String> _credentialsToMask(Object? body) =>

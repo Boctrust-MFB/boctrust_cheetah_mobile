@@ -13,6 +13,13 @@ const _maxFields = 5;
 final _codePattern = RegExp(r'^[A-Za-z0-9_.-]{2,48}$');
 final _requestIdPattern = RegExp(r'^[A-Za-z0-9._:-]{1,64}$');
 final _fieldPattern = RegExp(r'^[a-zA-Z][a-zA-Z0-9_.]{0,40}$');
+
+/// [candidate] when it is a well-formed opaque request ID, otherwise null.
+String? validRequestId(Object? candidate) =>
+    candidate is String && _requestIdPattern.hasMatch(candidate)
+    ? candidate
+    : null;
+
 const _fieldKeys = ['field', 'path', 'param'];
 
 /// Builds a payload-free summary of an error response.

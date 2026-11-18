@@ -422,7 +422,10 @@ void main() {
     release.onResponse(
       Response<Object?>(
         requestOptions: request,
-        data: '{"phone":"08011112222","note":"Ada Canary"}',
+        data: {
+          'meta': {'requestId': 'req-123'},
+          'note': 'Ada Canary',
+        },
       ),
       ResponseInterceptorHandler(),
     );
@@ -430,7 +433,10 @@ void main() {
       DioException(
         requestOptions: request,
         message: 'failed for 08011112222',
-        response: Response<Object?>(requestOptions: request, data: 'Ada'),
+        response: Response<Object?>(
+          requestOptions: request,
+          data: '{"phone":"08011112222","note":"Ada"}',
+        ),
       ),
       _SwallowingErrorHandler(),
     );
@@ -439,6 +445,7 @@ void main() {
       expect(logged, isNot(contains(secret)));
     }
     expect(logged, contains('/auth/login'));
+    expect(logged, contains('req-123'));
   });
 }
 

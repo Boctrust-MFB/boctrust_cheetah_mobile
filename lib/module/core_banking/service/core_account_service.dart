@@ -118,7 +118,11 @@ class CoreAccountService {
         parser: (json) =>
             CustomerBankAccount.tryParse(json) ??
             (throw const FormatException('Invalid account.')),
-        requestExtra: {apiCallLabelKey: _bankAccountLabel},
+        requestExtra: {
+          LoggingInterceptor.privacySensitivePathKey:
+              CoreApiEndpoints.bankAccountTemplate,
+          apiCallLabelKey: _bankAccountLabel,
+        },
       ),
     );
   }
@@ -137,7 +141,11 @@ class CoreAccountService {
       await api.getData<CoreAccountSummary>(
         CoreApiEndpoints.bankAccountSummary(accountNumber),
         parser: CoreAccountSummary.fromJson,
-        requestExtra: {apiCallLabelKey: _accountSummaryLabel},
+        requestExtra: {
+          LoggingInterceptor.privacySensitivePathKey:
+              CoreApiEndpoints.bankAccountSummaryTemplate,
+          apiCallLabelKey: _accountSummaryLabel,
+        },
       ),
     );
   }
@@ -167,7 +175,11 @@ class CoreAccountService {
           'pageSize': pageSize,
         },
         parser: CoreTransactionPage.fromJson,
-        requestExtra: {apiCallLabelKey: _accountTransactionsLabel},
+        requestExtra: {
+          LoggingInterceptor.privacySensitivePathKey:
+              CoreApiEndpoints.bankAccountTransactionsTemplate,
+          apiCallLabelKey: _accountTransactionsLabel,
+        },
       ),
     );
   }
@@ -199,7 +211,11 @@ class CoreAccountService {
           'toDate': formatCoreDateOnly(toDate),
         },
         parser: CoreAccountStatementReply.fromJson,
-        requestExtra: {apiCallLabelKey: _accountStatementLabel},
+        requestExtra: {
+          LoggingInterceptor.privacySensitivePathKey:
+              CoreApiEndpoints.bankAccountStatementTemplate,
+          apiCallLabelKey: _accountStatementLabel,
+        },
         receiveTimeout: _statementTimeout,
       ),
     );
