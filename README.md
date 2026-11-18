@@ -19,12 +19,16 @@ which screens and actions a build can offer.
 | Feature gates | [`lib/app/feature_capability.dart`](lib/app/feature_capability.dart) |
 | User and Core endpoints | [`lib/app/api_endpoints.dart`](lib/app/api_endpoints.dart), [`lib/app/core_api_endpoints.dart`](lib/app/core_api_endpoints.dart) |
 | Configuration | [`lib/app/services.dart`](lib/app/services.dart), [`.env.example`](.env.example) |
+| Firebase setup | [`firebase.json`](firebase.json), [`lib/firebase_options.dart`](lib/firebase_options.dart) |
+| Store update policy | [`lib/app/update/`](lib/app/update), [release runbook](docs/app-update-release-runbook.md) |
+| Shorebird | Planned; no project integration is tracked yet. See [Shorebird status](#shorebird-status). |
 
 ## Setup
 
 1. Install Flutter **3.44.6** (Dart **3.12.2**). For iOS, install Xcode and an
    iOS simulator; iOS deployment starts at **15.0**.
-2. Fetch packages and copy the example configuration:
+2. Fetch packages. If `.env.stage` does not exist yet, copy the example
+   configuration:
 
    ```sh
    flutter pub get
@@ -80,8 +84,12 @@ flowchart LR
     Core --> Banking[Accounts, savings, transfers, bills]
     Device --> Secure[Namespaced secure storage]
     Device --> Prefs[SharedPreferences]
-    Device --> Firebase[Firebase Messaging + Crashlytics]
+    Device --> Firebase[Firebase Core]
     Device --> Identity[Dojah / Smile ID capture]
+    Firebase --> Messaging[Cloud Messaging + local notifications]
+    Firebase --> Crashlytics[Crashlytics error reporting]
+    Firebase --> Remote[Remote Config update policy]
+    Remote --> Stores[Play / App Store availability check]
 ```
 
 Both API clients use the signed-in User Service bearer token. A User Service
@@ -97,6 +105,81 @@ The repository includes Android, iOS, web, Windows, macOS, and Linux Flutter
 targets. Native KYC capture needs a physical device. iOS dependencies use
 Swift Package Manager; the local Dojah plugin is Android-only and iOS opens
 Dojah's hosted flow in a WebView.
+
+## Firebase and notifications
+
+FlutterFire configuration is checked in for the `boctrust` Firebase project.
+The app initializes Firebase using the generated
+[`lib/firebase_options.dart`](lib/firebase_options.dart). The platform file
+locations are recorded in [`firebase.json`](firebase.json):
+
+| Platform | Native configuration in this repository |
+| --- | --- |
+| Android | [`android/app/google-services.json`](android/app/google-services.json); Google Services and Crashlytics Gradle plugins are applied in [`android/app/build.gradle.kts`](android/app/build.gradle.kts). |
+| iOS | [`ios/Runner/GoogleService-Info.plist`](ios/Runner/GoogleService-Info.plist); the Runner project includes it and uploads Crashlytics symbols. |
+| macOS | [`macos/Runner/GoogleService-Info.plist`](macos/Runner/GoogleService-Info.plist). |
+| Web and Windows | Entries in `lib/firebase_options.dart`; no native application file in this repository. |
+
+Linux has no generated Firebase options. Firebase initialization failures are
+caught during startup, so the app still opens, while Firebase-dependent
+features remain inactive.
+
+- **Cloud Messaging:** after a signed-in session is ready, the app requests
+  notification permission, obtains an FCM token, and registers or refreshes it
+  through the User Service. Foreground messages are displayed as local
+  notifications; displayable data-only background messages use the background
+  handler. Notification taps route through the app's validated navigation flow.
+- **Crashlytics:** `CRASHLYTICS_ENABLED=true` permits collection on Android and
+  iOS outside debug mode when Firebase initialized. Otherwise the app uses a
+  no-op reporter. See the [Crashlytics runbook](docs/crashlytics-runbook.md) for
+  redaction, rollout, and symbol handling.
+- **Remote Config:** `app_update_policy_v1` controls store-gated update checks
+  described below. A missing or invalid policy leaves updates disabled.
+
+Staging and production use the same checked-in Firebase application
+configuration; `ENV` and `CRASHLYTICS_ENABLED` are build-time controls, not
+separate Firebase app flavors.
+
+## App updates
+
+On Android and iOS non-debug builds, the app reads the Firebase Remote Config
+parameter `app_update_policy_v1` at launch, after returning from the background,
+and when Remote Config activates a change. Its built-in default disables
+updates on both platforms. The installed version comes from the app package;
+the app then confirms the release with Google Play or the App Store before it
+shows an update prompt. Web, desktop, and debug builds skip these checks.
+
+```mermaid
+flowchart LR
+    Policy[Remote Config policy] --> Compare[Compare installed version]
+    Compare --> Store{Store confirms target?}
+    Store -->|no| Continue[No update]
+    Store -->|uncertain| Previous[Keep current decision]
+    Store -->|yes, patch/build| Optional[Optional local notification]
+    Store -->|yes, major/minor or force| Required[Full-screen update gate]
+    Optional --> Listing[Open verified store listing]
+    Required --> Listing
+```
+
+The required gate covers every route and blocks navigation until the user
+updates or the policy is relaxed. An optional update posts at most one local
+notification per target release; it depends on notification permission. A
+failed or uncertain store check does not create a new gate. The app displays
+its installed version on key entry and account screens.
+
+The release process is: publish the binary, confirm availability on the
+intended store track or territories, then publish the Remote Config policy.
+Use the [app update release runbook](docs/app-update-release-runbook.md) for
+the JSON schema, version rules, store checks, and rollback procedure.
+
+### Shorebird status
+
+Shorebird integration is planned. This repository does not currently contain
+a `shorebird.yaml`, Shorebird updater integration, or a Shorebird release or
+patch workflow. The update feature above checks **full app releases** in Google
+Play and the App Store; it does not download Shorebird patches. Document
+Shorebird setup and patch delivery here after the release configuration and
+patch process are added to the repository.
 
 ## Routes and availability
 
@@ -281,4 +364,5 @@ spacing, and navigation components live in `lib/module/component/`.
 - [iOS Swift Package Manager verification](docs/verification/ios-swift-package-manager.md)
 - [Dojah KYC verification](docs/verification/dojah-kyc.md)
 - [Crashlytics runbook](docs/crashlytics-runbook.md)
+- [App update release runbook](docs/app-update-release-runbook.md)
 - [Current endpoint gaps](docs/endpoint-gaps-2026-10-14.md)
