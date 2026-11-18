@@ -11,6 +11,7 @@ import 'app/navigators.dart';
 import 'app/preferences.dart';
 import 'app/theme.dart';
 import 'app/theme_controller.dart';
+import 'app/tap_haptics.dart';
 import 'app/update/update_gate.dart';
 import 'helper/fcm_service.dart';
 import 'helper/local_notification_service.dart';
@@ -112,8 +113,10 @@ class _CheetahMaterialApp extends ConsumerWidget {
           // Keep debug sessions open during development. Profile and release
           // builds retain the normal inactivity warning and sign-out. A
           // required update covers every route; the guard keeps running.
-          child: UpdateGate(
-            child: kDebugMode ? child! : InactivityGuard(child: child!),
+          child: TapHaptics(
+            child: UpdateGate(
+              child: kDebugMode ? child! : InactivityGuard(child: child!),
+            ),
           ),
         );
       },
