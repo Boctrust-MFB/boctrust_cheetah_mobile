@@ -171,6 +171,6 @@ Separate changes:
 
 - Phase 2 UI action context.
 - `onGenerateInitialRoutes` to stop the `/` placeholder under `/bootstrap`.
-- `signed_upload_client.dart` still logs the full signed URL and headers via `apiLogger`, which prints in release builds. Fix in its own change.
+- Production release builds log signed uploads as event, method, full URL, status and duration only; headers, response bodies and exception text are dropped. The full signed URL is retained by decision: it is a bearer credential until it expires. It appears in the app logger only (device logcat/os_log, no remote log shipping) and never in Crashlytics fields, which omit URL, headers and exception text.
 
 Merge note: this branch was cut from local main at 8a2de94, without the uncommitted `receiveTimeout` change in `lib/app/network.dart` and `core_account_service.dart` that exists in the main checkout.

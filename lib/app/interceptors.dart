@@ -12,8 +12,11 @@ class LocalSessionExpired {
 }
 
 class LoggingInterceptor extends Interceptor {
-  LoggingInterceptor({required this.includeSensitiveData, Logger? logger})
-    : _logger = logger ?? apiLogger;
+  LoggingInterceptor({
+    required this.includeSensitiveData,
+    this.releaseLogPolicy = false,
+    Logger? logger,
+  }) : _logger = logger ?? apiLogger;
 
   static const _requestStartedAtKey = 'apiLogger.requestStartedAt';
 
@@ -54,9 +57,26 @@ class LoggingInterceptor extends Interceptor {
   final bool includeSensitiveData;
   final Logger _logger;
 
+  /// Production release builds only: log metadata (event, method, URL, status,
+  /// duration, error type) and nothing a server or exception could fill with
+  /// customer data. Query, headers, bodies, free-text messages, exception text
+  /// and stack traces are dropped rather than masked, because key-based
+  /// redaction cannot see inside a string body. Production debug and staging
+  /// keep their existing output.
+  final bool releaseLogPolicy;
+
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     options.extra[_requestStartedAtKey] = DateTime.now().microsecondsSinceEpoch;
+    if (releaseLogPolicy) {
+      _logger.i({
+        'event': 'REQUEST',
+        'method': options.method,
+        'url': _urlForLog(options),
+      });
+      handler.next(options);
+      return;
+    }
     _logger.i(
       _masked({
         'event': 'REQUEST',
@@ -74,6 +94,17 @@ class LoggingInterceptor extends Interceptor {
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
     final request = response.requestOptions;
+    if (releaseLogPolicy) {
+      _logger.i({
+        'event': 'RESPONSE',
+        'method': request.method,
+        'url': _urlForLog(request),
+        'statusCode': response.statusCode,
+        'durationMs': _durationMilliseconds(request),
+      });
+      handler.next(response);
+      return;
+    }
     final raw = _rawResponse(request);
     _logger.i(<Object?, Object?>{
       ...(_masked({
@@ -95,6 +126,18 @@ class LoggingInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     final request = err.requestOptions;
+    if (releaseLogPolicy) {
+      _logger.e({
+        'event': 'ERROR',
+        'method': request.method,
+        'url': _urlForLog(request),
+        'statusCode': err.response?.statusCode,
+        'durationMs': _durationMilliseconds(request),
+        'type': err.type.name,
+      });
+      handler.next(err);
+      return;
+    }
     final credentials = _credentialsToMask(request.data);
     // A request carrying a PIN or password never hands Logger the raw
     // exception, in any environment: its message, error or stack trace can

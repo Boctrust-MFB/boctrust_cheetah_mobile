@@ -287,6 +287,17 @@ not depend on that flag: `auth_token`, `partner_id`, the Smile config, the Smile
 `lib/app/interceptors.dart`. Do not move a value out of that set to make
 debugging easier.
 
+**Production release builds** (`ENV=prod` and `kReleaseMode`, see
+`Env.releaseLogPolicy`) log metadata only: event, method, URL, status, duration
+and error type. Query, headers, request and response bodies, server messages,
+exception text and stack traces are dropped, not masked. Production debug and
+staging output are unchanged. Signed uploads follow the same rule, except that
+the full signed upload URL is still logged by decision. That URL is a bearer
+credential until it expires. It appears only in the app logger, never in
+Crashlytics fields. Logs are device-level (logcat on Android, os_log on iOS);
+nothing ships them off the device, so access and retention are whatever the
+device's log access allows.
+
 ### Government-ID documents
 
 The government-ID form is driven by two authenticated User Service reads,

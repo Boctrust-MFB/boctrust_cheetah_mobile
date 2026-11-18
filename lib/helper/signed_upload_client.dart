@@ -47,6 +47,7 @@ final signedUploadClientProvider = Provider<SignedUploadClient>(
   (ref) => DioSignedUploadClient(
     ref.watch(signedUploadDioProvider),
     reporter: ref.watch(errorReporterProvider),
+    releaseLogPolicy: Env.releaseLogPolicy,
   ),
 );
 
@@ -55,6 +56,7 @@ class DioSignedUploadClient implements SignedUploadClient {
     this._dio, {
     Logger? logger,
     this._reporter = const NoopErrorReporter(),
+    this.releaseLogPolicy = false,
   }) : _logger = logger ?? apiLogger;
 
   static const _label = ApiCallLabel(
@@ -67,6 +69,11 @@ class DioSignedUploadClient implements SignedUploadClient {
   final Dio _dio;
   final Logger _logger;
   final AppErrorReporter _reporter;
+
+  /// Production release builds only: log event, method, full URL, status and
+  /// duration. Headers, response bodies and exception text are dropped. The
+  /// signed URL stays by decision; it is a bearer credential until it expires.
+  final bool releaseLogPolicy;
 
   /// Reports a failed upload. Never throws, and never carries the signed URL,
   /// its query, the headers or the exception text.
@@ -118,8 +125,10 @@ class DioSignedUploadClient implements SignedUploadClient {
       'event': 'UPLOAD_REQUEST',
       'method': 'PUT',
       'url': url.toString(),
-      'headers': headers,
-      'body': '<binary ${bytes.length} bytes>',
+      if (!releaseLogPolicy) ...{
+        'headers': headers,
+        'body': '<binary ${bytes.length} bytes>',
+      },
     });
 
     try {
@@ -140,10 +149,11 @@ class DioSignedUploadClient implements SignedUploadClient {
 
       _logger.i({
         'event': 'UPLOAD_RESPONSE',
+        if (releaseLogPolicy) 'method': 'PUT',
         'url': url.toString(),
         'status': statusCode,
         'durationMs': duration.inMilliseconds,
-        if (!isSuccess) 'body': response.data,
+        if (!isSuccess && !releaseLogPolicy) 'body': response.data,
       });
 
       if (isSuccess) {
@@ -158,12 +168,15 @@ class DioSignedUploadClient implements SignedUploadClient {
       final statusCode = error.response?.statusCode;
       _logger.e({
         'event': 'UPLOAD_ERROR',
+        if (releaseLogPolicy) 'method': 'PUT',
         'url': url.toString(),
         'status': statusCode,
         'durationMs': DateTime.now().difference(startedAt).inMilliseconds,
         'type': error.type.name,
-        'message': error.message,
-        'body': error.response?.data,
+        if (!releaseLogPolicy) ...{
+          'message': error.message,
+          'body': error.response?.data,
+        },
       });
       if (statusCode != null) {
         _reportStatus(statusCode, callStack);

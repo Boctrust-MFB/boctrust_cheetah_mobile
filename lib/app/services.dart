@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -32,6 +33,9 @@ abstract final class Env {
 
   static bool get isStaging => environment == 'staging';
   static bool get isProd => environment == 'prod';
+
+  /// Production release builds only: logs carry metadata, never payloads.
+  static bool get releaseLogPolicy => isProd && kReleaseMode;
 }
 
 final stagingModeProvider = Provider<bool>((ref) => Env.isStaging);

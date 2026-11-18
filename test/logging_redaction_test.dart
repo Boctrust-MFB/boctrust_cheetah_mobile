@@ -401,6 +401,45 @@ void main() {
       expect(emitted.join(), contains('Connection reset by peer'));
     });
   });
+
+  test('production release logs omit secrets, string bodies and headers', () {
+    final release = LoggingInterceptor(
+      includeSensitiveData: false,
+      releaseLogPolicy: true,
+      logger: Logger(
+        filter: ProductionFilter(),
+        printer: SimplePrinter(printTime: false, colors: false),
+        output: output,
+      ),
+    );
+    final request = RequestOptions(
+      path: '/auth/login',
+      method: 'POST',
+      data: {'pin': '482913'},
+      headers: {'Authorization': 'Bearer canary-token'},
+    );
+    release.onRequest(request, RequestInterceptorHandler());
+    release.onResponse(
+      Response<Object?>(
+        requestOptions: request,
+        data: '{"phone":"08011112222","note":"Ada Canary"}',
+      ),
+      ResponseInterceptorHandler(),
+    );
+    release.onError(
+      DioException(
+        requestOptions: request,
+        message: 'failed for 08011112222',
+        response: Response<Object?>(requestOptions: request, data: 'Ada'),
+      ),
+      _SwallowingErrorHandler(),
+    );
+    final logged = output.lines.join();
+    for (final secret in ['482913', 'canary-token', '08011112222', 'Ada']) {
+      expect(logged, isNot(contains(secret)));
+    }
+    expect(logged, contains('/auth/login'));
+  });
 }
 
 class _EverythingPrinter extends LogPrinter {
