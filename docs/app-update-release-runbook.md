@@ -58,7 +58,8 @@ Then upload symbols (`docs/crashlytics-runbook.md`, section 8).
 
 The preflight prints key names and pass/fail only, never values. It fails
 on: `ENV` not `prod`; non-HTTPS or staging-host `BASE_URL`/`CORE_BASE_URL`/
-`SITE_URL`; storage namespace equal to staging; a missing or staging-equal
+`SITE_URL`; a blank `CORE_BASE_URL` (pass `--allow-no-core` only when a
+build without Core is intended); storage namespace equal to staging; a missing or staging-equal
 Dojah widget ID; `DOJAH_USE_SANDBOX_BVN=true`; `CRASHLYTICS_ENABLED` other
 than `false` (pass `--crashlytics-approved`, which then requires `true`, only
 after the Crashlytics runbook gates pass); any key the app does not read. With

@@ -2,7 +2,7 @@
 //
 //   dart run tool/release_preflight.dart [--env .env.prod] \
 //       [--staging .env.stage] [--artifact build/.../app-release.aab] \
-//       [--crashlytics-approved]
+//       [--crashlytics-approved] [--allow-no-core]
 //
 // Never prints values from the env files: only key names and pass/fail.
 import 'dart:io';
@@ -38,20 +38,49 @@ final _warnings = <String>[];
 void _fail(String m) => _failures.add(m);
 void _warn(String m) => _warnings.add(m);
 
+// Mirrors Flutter's `--dart-define-from-file` .env parser
+// (DotEnvRegex / convertEnvFileToJsonRaw in flutter_command.dart), so the
+// value checked here is the value the build compiles in.
+final _multiLineBlock = RegExp(
+  r'^\s*([a-zA-Z_]+[a-zA-Z0-9_]*)\s*=\s*"""\s*(.*)$',
+);
+final _keyValue = RegExp(r'^\s*([a-zA-Z_]+[a-zA-Z0-9_]*)\s*=\s*(.*)?$');
+final _doubleQuoted = RegExp(r'^"(.*)"\s*(\#\s*.*)?$');
+final _singleQuoted = RegExp(r"^'(.*)'\s*(\#\s*.*)?$");
+final _backQuoted = RegExp(r'^`(.*)`\s*(\#\s*.*)?$');
+final _unquoted = RegExp(r'^([^#\n\s]*)\s*(?:\s*#\s*(.*))?$');
+
 Map<String, String> _parseEnv(String path) {
   final map = <String, String>{};
-  for (final raw in File(path).readAsLinesSync()) {
-    final line = raw.trim();
-    if (line.isEmpty || line.startsWith('#')) continue;
-    final i = line.indexOf('=');
-    if (i <= 0) continue;
-    var v = line.substring(i + 1).trim();
-    if (v.length >= 2 &&
-        ((v.startsWith('"') && v.endsWith('"')) ||
-            (v.startsWith("'") && v.endsWith("'")))) {
-      v = v.substring(1, v.length - 1);
+  final content = File(path).readAsStringSync();
+  if (content.trim().startsWith('{')) {
+    _fail('$path is JSON; the preflight only checks .env files');
+    return map;
+  }
+  final lines = content
+      .split('\n')
+      .map((l) => l.trim())
+      .where((l) => l.isNotEmpty && !l.startsWith('#'));
+  for (final line in lines) {
+    // Line contents are never printed: they may hold secrets.
+    if (_multiLineBlock.hasMatch(line)) {
+      _fail('$path has a multi-line value, which Flutter rejects');
+      continue;
     }
-    map[line.substring(0, i).trim()] = v;
+    final m = _keyValue.firstMatch(line);
+    if (m == null) {
+      _fail('$path has a malformed line, which Flutter rejects');
+      continue;
+    }
+    final value = m.group(2) ?? '';
+    final v =
+        (_doubleQuoted.firstMatch(value) ??
+                _singleQuoted.firstMatch(value) ??
+                _backQuoted.firstMatch(value) ??
+                _unquoted.firstMatch(value))
+            ?.group(1) ??
+        value;
+    map[m.group(1)!] = v;
   }
   return map;
 }
@@ -86,8 +115,9 @@ void _checkUrl(
 void _checkEnv(
   Map<String, String> prod,
   Map<String, String>? staging,
-  bool crashlyticsApproved,
-) {
+  bool crashlyticsApproved, {
+  bool allowNoCore = false,
+}) {
   for (final k in prod.keys) {
     if (!_allowedKeys.contains(k)) _fail('Unknown key present: $k');
   }
@@ -101,9 +131,17 @@ void _checkEnv(
   _checkUrl(prod, 'BASE_URL', stagingHosts, required: true);
   _checkUrl(prod, 'CORE_BASE_URL', stagingHosts, required: false);
   if ((prod['CORE_BASE_URL'] ?? '').isEmpty) {
-    _warn(
-      'CORE_BASE_URL is blank: Core capabilities are disabled in this build',
-    );
+    if (allowNoCore) {
+      _warn(
+        'CORE_BASE_URL is blank (--allow-no-core): Core capabilities are '
+        'disabled in this build',
+      );
+    } else {
+      _fail(
+        'CORE_BASE_URL is blank: Core capabilities would be disabled '
+        '(pass --allow-no-core only if that is intended)',
+      );
+    }
   }
   _checkUrl(prod, 'SITE_URL', const {}, required: true);
   if (staging != null &&
@@ -213,6 +251,7 @@ Future<void> main(List<String> args) async {
   var stagingPath = '.env.stage';
   String? artifact;
   var crashlyticsApproved = false;
+  var allowNoCore = false;
   for (var i = 0; i < args.length; i++) {
     switch (args[i]) {
       case '--env':
@@ -223,6 +262,8 @@ Future<void> main(List<String> args) async {
         artifact = args[++i];
       case '--crashlytics-approved':
         crashlyticsApproved = true;
+      case '--allow-no-core':
+        allowNoCore = true;
       default:
         stderr.writeln('Unknown argument: ${args[i]}');
         exit(64);
@@ -242,7 +283,7 @@ Future<void> main(List<String> args) async {
   }
 
   stdout.writeln('Checking $envPath (keys only, values never printed)');
-  _checkEnv(prod, staging, crashlyticsApproved);
+  _checkEnv(prod, staging, crashlyticsApproved, allowNoCore: allowNoCore);
   if (artifact != null) {
     stdout.writeln('Inspecting artifact $artifact');
     await _checkArtifact(artifact, staging);

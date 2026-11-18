@@ -288,10 +288,12 @@ not depend on that flag: `auth_token`, `partner_id`, the Smile config, the Smile
 debugging easier.
 
 **Production release builds** (`ENV=prod` and `kReleaseMode`, see
-`Env.releaseLogPolicy`) log metadata only: event, method, URL, status, duration
-and error type. Query, headers, request and response bodies, server messages,
+`Env.releaseLogPolicy`) log metadata only: event, method, URL, status, duration,
+error type and the opaque request ID (RESPONSE and ERROR). Query, headers, request and response bodies, server messages,
 exception text and stack traces are dropped, not masked. Production debug and
-staging output are unchanged. Signed uploads follow the same rule, except that
+staging output are unchanged, apart from the three Core account routes
+(account, summary, statement), which now log their path template in production
+debug and release builds. Signed uploads follow the same rule, except that
 the full signed upload URL is still logged by decision. That URL is a bearer
 credential until it expires. It appears only in the app logger, never in
 Crashlytics fields. Logs are device-level (logcat on Android, os_log on iOS);
