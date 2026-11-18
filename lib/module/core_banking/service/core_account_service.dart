@@ -175,11 +175,7 @@ class CoreAccountService {
           'pageSize': pageSize,
         },
         parser: CoreTransactionPage.fromJson,
-        requestExtra: {
-          LoggingInterceptor.privacySensitivePathKey:
-              CoreApiEndpoints.bankAccountTransactionsTemplate,
-          apiCallLabelKey: _accountTransactionsLabel,
-        },
+        requestExtra: {apiCallLabelKey: _accountTransactionsLabel},
       ),
     );
   }

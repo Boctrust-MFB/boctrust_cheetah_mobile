@@ -359,11 +359,20 @@ class LoggingInterceptor extends Interceptor {
     final template = _privacySafePath(options);
     // The template replaces only the request path; keep the base URL's path
     // (e.g. `/api/v1`) so the logged URL matches the one requested.
-    final path = template == null ? uri.path : '${_basePath(options)}$template';
+    final path = template == null
+        ? _scrubNumericSegments(uri.path)
+        : '${_basePath(options)}$template';
     if (uri.hasScheme && uri.host.isNotEmpty) return '${uri.origin}$path';
     if (template != null) return path;
     return options.path.split('?').first;
   }
+
+  /// Release policy only: a path segment of 8 or more digits is an account or
+  /// phone number, not an opaque ID. Routes whose tests pin their full
+  /// staging/debug output cannot carry a template, so they are scrubbed here.
+  String _scrubNumericSegments(String path) => releaseLogPolicy
+      ? path.replaceAll(RegExp(r'(?<=/)\d{8,}(?=/|$)'), '{number}')
+      : path;
 
   static String _basePath(RequestOptions options) {
     final path = Uri.tryParse(options.baseUrl)?.path ?? '';
