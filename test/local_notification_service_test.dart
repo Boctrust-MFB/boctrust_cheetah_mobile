@@ -50,9 +50,9 @@ void main() {
       expect(channels[0].id, 'boctrust_general');
       expect(channels[0].name, 'Cheetah notifications');
       expect(channels[0].importance, Importance.high);
-      expect(channels[1].id, 'boctrust_reminders');
-      expect(channels[1].name, 'Reminders');
-      expect(channels[1].importance, Importance.defaultImportance);
+      expect(channels[1].id, 'boctrust_savings_reminders');
+      expect(channels[1].name, 'Savings reminders');
+      expect(channels[1].importance, Importance.high);
     });
 
     test('a failure returns false without throwing, and can retry', () async {

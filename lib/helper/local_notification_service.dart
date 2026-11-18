@@ -37,8 +37,11 @@ class LocalNotificationService {
   static const channelId = 'boctrust_general';
   // The id stays so existing notification settings carry over.
   static const channelName = 'Cheetah notifications';
-  static const remindersChannelId = 'boctrust_reminders';
-  static const remindersChannelName = 'Reminders';
+  // High importance so reminders show as a banner. Android fixes a channel's
+  // importance when it is created, so this replaces the earlier
+  // default-importance 'boctrust_reminders' channel.
+  static const remindersChannelId = 'boctrust_savings_reminders';
+  static const remindersChannelName = 'Savings reminders';
   static const _fallbackTimeZone = 'Africa/Lagos';
 
   final FlutterLocalNotificationsPlugin _plugin;
@@ -89,7 +92,7 @@ class LocalNotificationService {
         const AndroidNotificationChannel(
           remindersChannelId,
           remindersChannelName,
-          importance: Importance.defaultImportance,
+          importance: Importance.high,
         ),
       );
       return true;
@@ -301,8 +304,8 @@ class LocalNotificationService {
     android: AndroidNotificationDetails(
       remindersChannelId,
       remindersChannelName,
-      importance: Importance.defaultImportance,
-      priority: Priority.defaultPriority,
+      importance: Importance.high,
+      priority: Priority.high,
       icon: androidSmallIcon,
     ),
     iOS: DarwinNotificationDetails(
