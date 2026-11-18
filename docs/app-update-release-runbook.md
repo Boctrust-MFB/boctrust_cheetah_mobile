@@ -41,6 +41,43 @@ There are no URLs in the policy. The Android store link is built from the
 installed package name. The iOS link is the App Store lookup result's
 `trackViewUrl`, accepted only for `https` on `apps.apple.com`.
 
+## Production build and preflight
+
+Run from a clean checkout of the release commit, with `.env.prod` present
+locally (never committed or published).
+
+```sh
+dart run tool/release_preflight.dart --env .env.prod --staging .env.stage
+flutter build appbundle --release --obfuscate --split-debug-info=build/symbols/android --dart-define-from-file=.env.prod
+flutter build ipa --release --obfuscate --split-debug-info=build/symbols/ios --dart-define-from-file=.env.prod
+dart run tool/release_preflight.dart --artifact build/app/outputs/bundle/release/app-release.aab
+dart run tool/release_preflight.dart --artifact build/ios/ipa/<name>.ipa
+```
+
+Then upload symbols (`docs/crashlytics-runbook.md`, section 8).
+
+The preflight prints key names and pass/fail only, never values. It fails
+on: `ENV` not `prod`; non-HTTPS or staging-host `BASE_URL`/`CORE_BASE_URL`/
+`SITE_URL`; storage namespace equal to staging; a missing or staging-equal
+Dojah widget ID; `DOJAH_USE_SANDBOX_BVN=true`; `CRASHLYTICS_ENABLED` other
+than `false` (pass `--crashlytics-approved`, which then requires `true`, only
+after the Crashlytics runbook gates pass); any key the app does not read. With
+`--artifact` (.aab/.apk/.ipa) it scans the Dart AOT library for staging hosts
+and the staging storage namespace, and warns when the sandbox BVNs survive
+tree-shaking.
+
+Android release signing reads `android/key.properties` (local, git-ignored)
+and fails the build without it. After building, confirm `versionName` and
+`versionCode` match `pubspec.yaml` and the bundle is not debug-signed.
+
+Checked by a human outside the source tree before upload:
+
+- [ ] iOS distribution certificate and provisioning profile valid
+- [ ] Bundle IDs match the store apps (Android and iOS)
+- [ ] iOS entitlements match the provisioning profile
+- [ ] Play upload key and App Store Connect credentials are the release ones
+- [ ] `.env.prod` has no `PAYSTACK_PUBLIC_KEY` (unused, rejected by the preflight)
+
 ## Version rules
 
 Versions follow `pubspec.yaml` `version: x.y.z+build` (currently `1.0.0+1`).

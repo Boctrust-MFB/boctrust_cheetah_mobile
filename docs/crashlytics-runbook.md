@@ -113,11 +113,11 @@ Questions to ask the API owners:
 
 - iOS: the Runner run-script phase "Upload Crashlytics Symbols" uploads dSYMs. It only does work with dSYMs (release or profile). It is untested until the first release archive.
 - Android: the Crashlytics Gradle plugin uploads the mapping file for release builds.
-- UNCONFIRMED: whether release builds pass `--obfuscate --split-debug-info`. Question for whoever produces release builds.
-  - Without obfuscation: nothing extra to upload for Dart.
-  - With obfuscation: build with `--obfuscate --split-debug-info=<dir>`, then upload:
-    - Android: `firebase crashlytics:symbols:upload --app=1:94126412804:android:ce857374353d9b82291151 <dir>`
-    - iOS: `firebase crashlytics:symbols:upload --app=1:94126412804:ios:a21014492da995dd291151 <dir>`
+- Decision: release builds use `--obfuscate --split-debug-info=build/symbols/<android|ios>`. Upload the matching symbols after every release build, from the same build output:
+  - Android: `firebase crashlytics:symbols:upload --app=1:94126412804:android:ce857374353d9b82291151 build/symbols/android`
+  - iOS: `firebase crashlytics:symbols:upload --app=1:94126412804:ios:a21014492da995dd291151 build/symbols/ios`
+  - Keep `build/symbols/` for each shipped build number; stacks from that build cannot be read without it. The directory is git-ignored.
+  - Exact build commands are in `docs/app-update-release-runbook.md`, "Production build and preflight".
 
 ## 9. Staging validation (Pending, not yet run)
 
