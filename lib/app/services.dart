@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kReleaseMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kReleaseMode;
 import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -33,6 +33,11 @@ abstract final class Env {
 
   static bool get isStaging => environment == 'staging';
   static bool get isProd => environment == 'prod';
+
+  /// Staging builds and every debug build log API traffic unredacted, so a
+  /// developer running production config locally sees the same detail as
+  /// staging. Release and profile builds outside staging keep redaction.
+  static bool get logsSensitiveData => isStaging || kDebugMode;
 
   /// Production release builds only: logs carry metadata, never payloads.
   static bool get releaseLogPolicy => isProd && kReleaseMode;

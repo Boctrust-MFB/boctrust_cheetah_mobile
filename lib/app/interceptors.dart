@@ -53,8 +53,9 @@ class LoggingInterceptor extends Interceptor {
     'customerid',
   };
 
-  /// Staging only: when true nothing is redacted, including PINs, passwords,
-  /// tokens and privacy-sensitive paths. Production keeps every redaction.
+  /// Staging and debug builds (see `Env.logsSensitiveData`): when true nothing
+  /// is redacted, including PINs, passwords, tokens and privacy-sensitive
+  /// paths. Production release and profile builds keep every redaction.
   final bool includeSensitiveData;
   final Logger _logger;
 

@@ -38,7 +38,7 @@ Dio buildApiDio(String baseUrl, AuthInterceptor auth) {
   dio.interceptors.addAll([
     auth,
     LoggingInterceptor(
-      includeSensitiveData: Env.isStaging,
+      includeSensitiveData: Env.logsSensitiveData,
       releaseLogPolicy: Env.releaseLogPolicy,
     ),
     ActivityInterceptor(),
